@@ -20,6 +20,11 @@ app.mount("/audio", StaticFiles(directory=AUDIO_DIR), name="audio")
 orch = Orchestrator()
 
 
+@app.on_event("startup")
+def _load_stt():
+    stt.warm_up()
+
+
 def _err(status, code, message, retryable=False):
     raise HTTPException(status, detail={"error": {"code": code, "message": message, "retryable": retryable}})
 
