@@ -15,8 +15,11 @@ BANK_BACKEND = os.getenv("BANK_BACKEND", "mock")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 BANKING_API_URL = os.getenv("BANKING_API_URL", "").rstrip("/")
 
-STT_MODEL = os.getenv("STT_MODEL", "small")
-STT_MIN_CONFIDENCE = float(os.getenv("STT_MIN_CONFIDENCE", "0.6"))
+# base.en + beam 1: measured 18/18 noisy clips understood at ~1.8 s on 8 CPUs (small: ~5.3 s)
+STT_MODEL = os.getenv("STT_MODEL", "base.en")
+STT_BEAM = int(os.getenv("STT_BEAM", "1"))
+# digits (customer IDs) score ~0.55-0.65, so the cutoff sits below that
+STT_MIN_CONFIDENCE = float(os.getenv("STT_MIN_CONFIDENCE", "0.45"))
 
 # "browser" = frontend speaks the text; "edge" = backend makes an mp3 with edge-tts
 TTS_PROVIDER = os.getenv("TTS_PROVIDER", "browser")

@@ -98,8 +98,9 @@ class NeonBank:
                 "escalation_reason", "call_id", "idempotency_key")
         for _ in range(5):  # retry if two calls grab the same number
             nxt = self._q(
+                # other services may use non-numeric IDs (e.g. SR-5F234A); only count numeric ones
                 "SELECT GREATEST(%s, COALESCE(MAX(split_part(ticket_id,'-',2)::int)+1, %s)) AS n "
-                "FROM tickets WHERE ticket_id LIKE %s", (start, start, f"{prefix}-%"), one=True)["n"]
+                "FROM tickets WHERE ticket_id ~ %s", (start, start, f"^{prefix}-[0-9]+$"), one=True)["n"]
             tid = f"{prefix}-{nxt}"
             try:
                 row = self._q(
