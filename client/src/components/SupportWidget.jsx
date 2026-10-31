@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { supportApi, agentApi } from '../services/api';
+import { supportApi, agentApi, describeTurn } from '../services/api';
 import { getBankingReply, getWelcomeGreeting, isPersonalAccountQuery } from '../services/bankingKnowledge';
 import LiveVoiceAgent from './LiveVoiceAgent';
 
@@ -189,6 +189,7 @@ export default function SupportWidget({ user, onOpenAuth }) {
     try {
       let replyContent = '';
       let requiresLogin = false;
+      let turnDesc = '';
 
       // Security Check: If guest is asking about personal accounts, prompt login immediately
       if (!user && isPersonalAccountQuery(text)) {
@@ -197,13 +198,19 @@ export default function SupportWidget({ user, onOpenAuth }) {
         requiresLogin = local.requiresLogin;
       } else {
         try {
-          const res = await agentApi.chat(text);
-          replyContent = res.reply;
+          const result = await agentApi.sendText(text);
+          replyContent = result.reply_text || result.reply || '';
+          turnDesc = describeTurn(result);
         } catch (chatErr) {
-          console.warn('agentApi chat failed, using local banking engine:', chatErr);
-          const local = getBankingReply(text, user);
-          replyContent = local.reply;
-          requiresLogin = local.requiresLogin;
+          console.warn('agentApi sendText failed, attempting local fallback:', chatErr);
+          try {
+            const res = await agentApi.chat(text);
+            replyContent = res.reply;
+          } catch (_) {
+            const local = getBankingReply(text, user);
+            replyContent = local.reply;
+            requiresLogin = local.requiresLogin;
+          }
         }
       }
 
@@ -223,7 +230,7 @@ export default function SupportWidget({ user, onOpenAuth }) {
           id: 'bot-' + Date.now(),
           sender: 'assistant',
           type: 'text',
-          content: replyContent,
+          content: `${replyContent}${turnDesc}`,
           requiresLogin,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
@@ -268,13 +275,7 @@ export default function SupportWidget({ user, onOpenAuth }) {
     setIsSending(true);
 
     try {
-      const result = await supportApi.sendVoice(currentAudio.blob, {
-        customer_name: user?.full_name || 'Customer',
-        account_number: user?.account_number || '',
-        note: `Voice message (${formatTime(currentAudio.duration)})`,
-      });
-
-      const sizeKb = result.size_bytes ? (result.size_bytes / 1024).toFixed(1) + ' KB' : '';
+      const result = await agentApi.sendVoice(currentAudio.blob);
 
       setMessages((prev) => [
         ...prev,
@@ -282,7 +283,7 @@ export default function SupportWidget({ user, onOpenAuth }) {
           id: 'bot-voice-' + Date.now(),
           sender: 'assistant',
           type: 'text',
-          content: `Received! We recorded your voice note (Ref #${result.ticket_id || 'SUP-V-01'}${sizeKb ? ` • ${sizeKb}` : ''}) and are processing your request.`,
+          content: `${result.transcript ? `Heard: "${result.transcript}"\n\n` : ''}${result.reply_text}${describeTurn(result)}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);

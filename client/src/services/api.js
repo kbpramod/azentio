@@ -209,6 +209,67 @@ export const bankingApi = {
   },
 };
 
+// VaaniDesk AI agent: one server session per conversation; the server forwards each turn to the AI service.
+let agentSessionId = null;
+
+export const agentApi = {
+  ensureSession: async (channel = 'web_voice') => {
+    if (!agentSessionId) {
+      const s = await apiRequest('/sessions', { method: 'POST', body: JSON.stringify({ channel }) });
+      agentSessionId = s.session_id;
+    }
+    return agentSessionId;
+  },
+
+  // returns TurnResponse: reply_text, transcript, detected_intents, verified, tickets, escalation, sources ...
+  sendText: async (text) => {
+    const sid = await agentApi.ensureSession('chat');
+    return apiRequest(`/sessions/${sid}/turn`, {
+      method: 'POST',
+      body: JSON.stringify({ text, input_type: 'text' }),
+    });
+  },
+
+  sendVoice: async (audioBlob) => {
+    const sid = await agentApi.ensureSession('web_voice');
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'turn.webm');
+    const response = await fetch(`${API_BASE}/sessions/${sid}/turn/audio`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const err = data.detail?.error?.message || data.error?.message || data.detail || 'Voice request failed';
+      throw new Error(typeof err === 'string' ? err : 'Voice request failed');
+    }
+    return data;
+  },
+
+  chat: async (message) => {
+    return apiRequest('/agent/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+
+  endSession: async () => {
+    if (!agentSessionId) return;
+    const sid = agentSessionId;
+    agentSessionId = null;
+    return apiRequest(`/sessions/${sid}/end`, { method: 'POST', body: JSON.stringify({}) }).catch(() => {});
+  },
+};
+
+// Short reference line for tickets/escalation shown under the agent reply
+export const describeTurn = (turn) => {
+  const parts = [];
+  if (turn?.tickets?.length) parts.push(`Ref ${turn.tickets.join(', ')}`);
+  if (turn?.escalation) parts.push('Transferred to a human agent');
+  return parts.length ? ` (${parts.join(' • ')})` : '';
+};
+
 export const supportApi = {
   sendVoice: async (audioBlob, metadata = {}) => {
     const formData = new FormData();
@@ -289,14 +350,5 @@ export const sessionApi = {
 
   getEscalationTickets: async () => {
     return apiRequest('/sessions/escalation-tickets');
-  },
-};
-
-export const agentApi = {
-  chat: async (message) => {
-    return apiRequest('/agent/chat', {
-      method: 'POST',
-      body: JSON.stringify({ message }),
-    });
   },
 };

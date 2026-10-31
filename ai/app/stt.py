@@ -4,13 +4,22 @@ Browser audio (webm/ogg/mp3/wav) is converted to 16 kHz mono wav with ffmpeg fir
 Model loads once, lazily, so text-only mode starts fast and needs no STT install.
 """
 import math
+import os
 import subprocess
 import tempfile
+import wave
 from pathlib import Path
+
+import numpy as np
 
 from . import config
 
 _model = None
+
+# Domain words bias Whisper toward banking vocabulary (generic list, not the test sentences)
+DOMAIN_PROMPT = ("Bank customer service call. Customer ID, date of birth, EMI, instalment, loan application, "
+                 "personal loan, vehicle loan, home loan, repayment schedule, statement, insurance claim, policy, "
+                 "premium, complaint, unauthorised debit, transaction, account balance, rupees.")
 
 
 class STTError(Exception):
@@ -24,8 +33,16 @@ def _get_model():
             from faster_whisper import WhisperModel
         except ImportError as exc:
             raise STTError("faster-whisper not installed. Run: pip install -r requirements-voice.txt") from exc
-        _model = WhisperModel(config.STT_MODEL, device="cpu", compute_type="int8")
+        _model = WhisperModel(config.STT_MODEL, device="cpu", compute_type="int8", cpu_threads=os.cpu_count() or 4)
     return _model
+
+
+def warm_up():
+    """Load the model at startup so the first caller doesn't wait."""
+    try:
+        _get_model()
+    except STTError:
+        pass
 
 
 def _to_wav(src: Path) -> Path:
@@ -43,9 +60,13 @@ def transcribe_bytes(data: bytes, filename: str = "audio.webm", language: str = 
         src = Path(tmp) / Path(filename).name
         src.write_bytes(data)
         wav = _to_wav(src)
+        # pass samples directly (avoids PyAV version mismatches; ffmpeg already decoded the audio)
+        with wave.open(str(wav), "rb") as w:
+            samples = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32) / 32768.0
         segments, _info = _get_model().transcribe(
-            str(wav), language=language, beam_size=5, vad_filter=True,  # VAD trims silence/noise
+            samples, language=language, beam_size=config.STT_BEAM, vad_filter=True,  # VAD trims silence/noise
             temperature=0.0,  # reproducible output for the same file
+            initial_prompt=DOMAIN_PROMPT,
         )
         segments = list(segments)
     text = " ".join(s.text.strip() for s in segments).strip()

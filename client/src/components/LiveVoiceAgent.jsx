@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { sessionApi, agentApi } from '../services/api';
+import { sessionApi, agentApi, describeTurn } from '../services/api';
 import { getBankingReply, getWelcomeGreeting, isPersonalAccountQuery } from '../services/bankingKnowledge';
 
 export default function LiveVoiceAgent({ user, onSwitchToChat, onClose, onOpenAuth }) {
@@ -192,7 +192,10 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose, onOpenAu
         }
 
         const turnRes = await sessionApi.sendTurn(sid, text, 'voice_transcript');
-        responseText = turnRes.reply_text;
+        responseText = turnRes.reply_text || '';
+        if (turnRes && (turnRes.tickets?.length || turnRes.escalation)) {
+          responseText += describeTurn(turnRes);
+        }
       } catch (err) {
         console.warn('Session turn failed, attempting agentApi:', err);
         try {
