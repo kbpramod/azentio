@@ -33,7 +33,7 @@ def _session(sid):
 
 @app.get("/health")
 def health():
-    return {"ok": True, "nlu_mode": config.NLU_MODE, "banking": config.BANKING_API_URL or "built-in mock (SIMULATED)",
+    return {"ok": True, "nlu_mode": config.NLU_MODE, "banking": config.BANK_BACKEND,
             "tts": config.TTS_PROVIDER}
 
 
