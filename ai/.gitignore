@@ -4,3 +4,6 @@ __pycache__/
 audio_out/
 tests/eval_results.json
 .pytest_cache/
+tests/audio/
+tests/audio_results.json
+tests/nlu_compare_results.json
