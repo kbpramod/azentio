@@ -9,3 +9,5 @@ venv/
 server/banking.db
 __pycache__/
 .pytest_cache/
+uploads/
+server/uploads/
