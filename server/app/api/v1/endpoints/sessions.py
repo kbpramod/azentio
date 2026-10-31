@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.integrations.ai_pipeline import process_ai_turn
-from app.models.vaani_models import Customer, Session
+from app.models.vaani_models import Customer, Session, Ticket, EscalationTicket
 from app.schemas.vaani_schemas import (
     EndSessionRequest,
     EndSessionResponse,
@@ -57,11 +57,7 @@ async def api_create_session(
         session.current_state = 'VERIFIED'
         await db.commit()
         await db.refresh(session)
-        greeting = (
-            f"Hello {current_user.full_name}! Welcome back to your Azentio Voice Banking Assistant. "
-            f"You are signed in as {current_user.email} (Account: {current_user.account_number}). "
-            f"How can I assist you with your accounts, loans, or transactions today?"
-        )
+        greeting = f"Hello {current_user.full_name}, how can I help you today?"
     else:
         greeting = (
             "Hello! Welcome to Azentio Banking Voice Assistant. "
@@ -259,23 +255,89 @@ async def api_escalate_session(
 @router.post(
     "/{session_id}/end",
     response_model=EndSessionResponse,
-    summary="End session and finalize call record",
+    summary="End session, persist session details in tickets, and route unhandled inquiries to escalation_tickets",
 )
 async def api_end_session(
     session_id: str,
     payload: Optional[EndSessionRequest] = None,
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> EndSessionResponse:
     reason = payload.reason if payload and payload.reason else "Customer ended interaction"
-    session, call = await end_session(
+    session, call, ticket, esc_ticket = await end_session(
         db=db,
         session_id=session_id,
         reason=reason,
+        current_user=current_user,
     )
     return EndSessionResponse(
         session_id=session.session_id,
         call_id=call.call_id if call else "CALL-N/A",
         status=session.current_state,
-        message="Session terminated successfully.",
+        message="Session terminated and logged to support tickets.",
+        ticket_id=ticket.ticket_id if ticket else None,
+        escalated=bool(esc_ticket is not None),
+        escalation_ticket_id=esc_ticket.escalation_ticket_id if esc_ticket else None,
     )
 
+
+@router.get(
+    "/tickets",
+    summary="List all session tickets",
+)
+async def api_list_session_tickets(
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(Ticket).order_by(Ticket.created_at.desc()).limit(50)
+    )
+    tickets = result.scalars().all()
+    return [
+        {
+            "ticket_id": t.ticket_id,
+            "session_id": t.session_id,
+            "call_id": t.call_id,
+            "customer_id": t.customer_id,
+            "type": t.ticket_type,
+            "category": t.category,
+            "summary": t.summary,
+            "priority": t.priority,
+            "status": t.status,
+            "escalated": t.escalated,
+            "escalation_reason": t.escalation_reason,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in tickets
+    ]
+
+
+@router.get(
+    "/escalation-tickets",
+    summary="List all escalation tickets where AI was unable to handle the inquiry",
+)
+async def api_list_escalation_tickets(
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(EscalationTicket).order_by(EscalationTicket.created_at.desc()).limit(50)
+    )
+    esc_tickets = result.scalars().all()
+    return [
+        {
+            "escalation_ticket_id": t.escalation_ticket_id,
+            "ticket_id": t.ticket_id,
+            "session_id": t.session_id,
+            "call_id": t.call_id,
+            "customer_id": t.customer_id,
+            "customer_name": t.customer_name,
+            "customer_email": t.customer_email,
+            "reason": t.reason,
+            "query_summary": t.query_summary,
+            "transcript": t.transcript,
+            "ai_turns_count": t.ai_turns_count,
+            "status": t.status,
+            "priority": t.priority,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        }
+        for t in esc_tickets
+    ]

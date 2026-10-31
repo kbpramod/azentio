@@ -106,11 +106,7 @@ def _generate_agent_response(user_msg: str, user: Optional[User] = None) -> str:
         )
 
     elif any(k in msg for k in ['hello', 'hi', 'hey', 'greetings']):
-        return (
-            f'Hello {user.full_name}! Welcome back to your Azentio Banking Assistant. '
-            f'You are signed in as {user.email} (Account: {user.account_number}). '
-            f'How may I assist you with your balance, loans, or transactions today?'
-        )
+        return f"Hello {user.full_name}, how can I help you today?" 
 
     else:
         return (

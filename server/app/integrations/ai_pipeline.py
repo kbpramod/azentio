@@ -144,11 +144,7 @@ async def _rule_based_turn(
 
             elif any(w in lowered for w in ["hello", "hi", "hey", "greetings"]):
                 detected_intents.append("greeting")
-                reply_text = (
-                    f"Hello {current_user.full_name}! Welcome back to your Azentio Voice Banking Assistant. "
-                    f"You are signed in as {current_user.email} (Account: {current_user.account_number}). "
-                    f"How can I assist you with your accounts, loans, or transactions today?"
-                )
+                reply_text = f"Hello {current_user.full_name}, how can I help you today?"
 
             else:
                 detected_intents.append("general_assistant_query")

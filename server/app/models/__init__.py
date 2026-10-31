@@ -12,6 +12,7 @@ from app.models.vaani_models import (
     ConversationTurn,
     Ticket,
     Escalation,
+    EscalationTicket,
     AuditEvent,
 )
 
@@ -29,5 +30,6 @@ __all__ = [
     "ConversationTurn",
     "Ticket",
     "Escalation",
+    "EscalationTicket",
     "AuditEvent",
 ]
