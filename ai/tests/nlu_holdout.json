@@ -1,0 +1,18 @@
+[
+  {"say": "Is my home loan approved or still pending?", "intents": ["loan_status"], "entities": {"product": "home"}},
+  {"say": "What amount do I need to pay this month for my personal loan?", "intents": ["emi_enquiry"], "entities": {"product": "personal"}},
+  {"say": "How many payments are left on my car loan?", "intents": ["emi_enquiry"], "entities": {"product": "vehicle"}},
+  {"say": "Send me the EMI chart for all remaining instalments", "intents": ["repayment_schedule"]},
+  {"say": "I need a copy of my loan account statement", "intents": ["loan_statement"]},
+  {"say": "What's my current bank balance?", "intents": ["account_balance"]},
+  {"say": "My UPI transfer to my friend is showing failed, what happened?", "intents": ["transaction_status"]},
+  {"say": "There's a debit on my card that I did not authorise", "intents": ["complaint"], "entities": {"complaint_category": "unauthorised_txn"}},
+  {"say": "I was charged a late fee even though I paid on time, I'm not happy", "intents": ["complaint"]},
+  {"say": "Can you tell me the progress on the complaint I filed?", "intents": ["ticket_status"]},
+  {"say": "When is my insurance premium due?", "intents": ["policy_enquiry"]},
+  {"say": "Has my insurance claim been settled?", "intents": ["claim_status"]},
+  {"say": "I'd like to speak to a manager please", "intents": ["human_handoff"]},
+  {"say": "Give me my father's account balance", "intents": ["third_party_request"]},
+  {"say": "Can you order me a pizza?", "intents": ["unknown"]},
+  {"say": "customer id c one one eight eight, date of birth second november nineteen seventy nine", "intents": [], "entities": {"customer_id": "C1188", "dob": "1979-11-02"}}
+]

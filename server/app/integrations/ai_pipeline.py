@@ -200,6 +200,16 @@ from app.core.config import settings  # noqa: E402
 
 AI_TIMEOUT = httpx.Timeout(60.0, connect=3.0)  # speech-to-text on CPU takes a few seconds
 _AI_SESSIONS: Dict[str, str] = {}  # server session_id -> AI session_id (in memory)
+_TURN_NO: Dict[str, int] = {}      # call_id -> last turn number (saves a COUNT query per turn)
+
+
+def _audit(db: AsyncSession, event_type: str, session_id: str, call_id: str, metadata: Dict[str, Any]) -> None:
+    """Same row as record_audit_event, but saved with the turn's commit instead of its own flush
+    (each extra round trip to the US-region database costs ~0.3-0.5 s)."""
+    from app.models.vaani_models import AuditEvent
+    from app.services.audit_service import sanitize_metadata
+    db.add(AuditEvent(session_id=session_id, call_id=call_id, event_type=event_type,
+                      event_status="SUCCESS", safe_metadata=sanitize_metadata(metadata)))
 
 
 class AIUnavailable(Exception):
@@ -274,9 +284,8 @@ async def process_ai_turn(
         session.customer_id = ai["customer_id"]
         session.current_state = "VERIFIED"
         call.customer_id = ai["customer_id"]
-        await record_audit_event(db=db, event_type="VERIFICATION", event_status="SUCCESS",
-                                 session_id=session.session_id, call_id=call.call_id,
-                                 metadata={"via": "voice_agent", "customer_id": ai["customer_id"]})
+        _audit(db, "VERIFICATION", session.session_id, call.call_id,
+               {"via": "voice_agent", "customer_id": ai["customer_id"]})
     escalation = ai.get("escalation")
     if escalation and session.current_state != "ESCALATED":
         # same record the manual /escalate endpoint creates, so the ops escalation queue shows it;
@@ -293,19 +302,20 @@ async def process_ai_turn(
                 reason=f"{escalation.get('reason')} ({escalation.get('priority', 'NORMAL')}): {summary}"[:1000],
                 ticket_id=escalation.get("ticket_id"), status="PENDING_AGENT",
             ))
-            await record_audit_event(db=db, event_type="ESCALATION_CREATED", event_status="SUCCESS",
-                                     session_id=session.session_id, call_id=call.call_id,
-                                     metadata={"reason": escalation.get("reason"), "priority": escalation.get("priority"),
+            _audit(db, "ESCALATION_CREATED", session.session_id, call.call_id, {"reason": escalation.get("reason"), "priority": escalation.get("priority"),
                                                "ticket_id": escalation.get("ticket_id"),
                                                "escalation_id": escalation_id, "via": "voice_agent"})
         call.escalation_status = "ESCALATED"
         call.outcome = "ESCALATED"
         session.current_state = "ESCALATED"
 
-    count_res = await db.execute(
-        select(func.count(ConversationTurn.turn_id)).where(ConversationTurn.call_id == call.call_id)
-    )
-    turn_count = (count_res.scalar() or 0) + 1
+    if call.call_id not in _TURN_NO:  # first turn seen by this process: count once
+        count_res = await db.execute(
+            select(func.count(ConversationTurn.turn_id)).where(ConversationTurn.call_id == call.call_id)
+        )
+        _TURN_NO[call.call_id] = count_res.scalar() or 0
+    _TURN_NO[call.call_id] += 1
+    turn_count = _TURN_NO[call.call_id]
     turn_id = f"TURN-{uuid.uuid4().hex[:6].upper()}"
     intents = [i["name"] for i in ai.get("intents", [])]
     transcript = ai.get("transcript") or text
@@ -315,9 +325,7 @@ async def process_ai_turn(
         input_type="voice_audio" if audio is not None else input_type, transcript=transcript,
         detected_intents=intents, reply_text=ai["reply_text"], processing_status="COMPLETED",
     ))
-    await record_audit_event(db=db, event_type="TURN_PROCESSED", event_status="SUCCESS",
-                             session_id=session.session_id, call_id=call.call_id,
-                             metadata={"turn_id": turn_id, "turn_number": turn_count, "intents": intents,
+    _audit(db, "TURN_PROCESSED", session.session_id, call.call_id, {"turn_id": turn_id, "turn_number": turn_count, "intents": intents,
                                        "engine": "ai_service", "latency_ms": ai.get("latency_ms")})
     await db.commit()
 

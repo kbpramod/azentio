@@ -9,7 +9,8 @@ than real callers; real recordings from the team should be added before claiming
 | Step | Technology | LLM? |
 |---|---|---|
 | Speech-to-text | Whisper `base.en` (faster-whisper, local CPU, int8) + banking vocabulary prompt | No |
-| Intent + details | Rule-based NLU (`app/nlu.py`). Claude support is coded but **not enabled or measured** | No |
+| Intent classification | Rules first; **local LLM Qwen2.5 1.5B (Ollama, offline, free)** only when the rules recognise nothing | Yes (fallback only) |
+| IDs, dates of birth, ticket numbers | Exact patterns + spoken-number conversion ("c one zero four five" → C1045) | No |
 | Verification, routing, escalation | Deterministic Python rules | No |
 | Replies | Templates filled only from database values + number check | No |
 | Speech output | Browser speech synthesis | No |
@@ -41,7 +42,21 @@ Remaining misses: "never made" heard as "never need" (3, phone/fast), date of bi
 "personal loan" heard as "person alone" (1, fast US voice). Before the domain prompt + customer-ID fix: 166 / 180.
 WER is inflated by number formatting ("C 1 0 2 3" vs "C1023").
 
-## 3. Full voice call through the app (frontend → server → AI → Neon)
+## 3. Intent classification on new wording (40 sentences never used to build the rules)
+
+Informal, indirect, Hinglish and two-part requests (`tests/nlu_unseen.json`, `tests/nlu_holdout.json`; `python -m tests.nlu_compare`).
+The holdout set was written after the rules were broadened and was not used to tune anything.
+
+| Set | Original rules | Broadened rules | Rules + local LLM (Qwen2.5 1.5B) |
+|---|---|---|---|
+| Set A (24) | 7 / 24 | 23 / 24 | 23 / 24 (LLM used 2×) |
+| Holdout (16) | — | 14 / 16 | **16 / 16** (LLM used 3×) |
+
+Local LLM call: ~4–5.5 s on this CPU (8 cores, no GPU), so it only runs when the rules recognise nothing (~1 in 8 sentences).
+Qwen2.5 3B gave the same accuracy at 6–8 s. Letting the LLM override sentences the rules already understood made results worse
+(it labelled a gold-loan FAQ as a policy question), so it never does.
+
+## 4. Full voice call through the app (frontend → server → AI → Neon)
 
 | Caller audio | Agent result |
 |---|---|
@@ -51,12 +66,13 @@ WER is inflated by number formatting ("C 1 0 2 3" vs "C1023").
 | Repayment schedule (fast, US) | Ticket SR-4489 |
 | "A debit I never made" (loud, UK) | Complaint CMP-2216 + HIGH escalation, visible in ops escalation queue |
 
-Per-turn time, voice, end to end: **4.7 – 7.5 s**. Of that, speech-to-text ≈ 1.8 s and AI processing ≤ 0.3 s
+Per-turn time (after speed fixes): AI service alone 0.2–0.5 s for text; through the server ~3.2 s for text,
+~5.2 s for voice, +4–5 s when the local LLM is needed. Earlier: 4.7 – 7.5 s for voice. Of that, speech-to-text ≈ 1.8 s and AI processing ≤ 0.3 s
 (profile loaded once per call); the rest is server-side database writes to the US-region database.
 
 ## Known limits
 
-- No LLM in use. Intent detection is rule-based; phrasing far from the rules goes to the "unknown" fallback.
+- The LLM is a small local model: when it is needed, that turn takes ~4–5 s longer. If Ollama is not running, the agent uses rules only.
 - English only (Whisper `base.en`).
 - Synthetic voices only; no real-caller recordings measured yet.
 - Voice turn latency above target (~5 s) mainly from cross-region database round trips.

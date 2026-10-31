@@ -5,8 +5,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# NLU: "rules" (offline), "llm" (Claude), "auto" (Claude if a key is set, else rules)
-NLU_MODE = os.getenv("NLU_MODE", "auto")
+# NLU: "rules" | "hybrid" (rules first, LLM when rules don't understand) | "llm" (LLM every turn)
+NLU_MODE = os.getenv("NLU_MODE", "hybrid")
+# LLM: "ollama" = free local model (no key, offline) | "anthropic" = Claude API (needs a key)
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama")
+OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
+# measured on 8 CPUs: 1.5b ~3.5-4.5 s per call, 3b ~6-8 s, same accuracy on our test sentences
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:1.5b")
+LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "8"))  # seconds; on timeout the rules answer
 LLM_MODEL = os.getenv("LLM_MODEL", "claude-opus-5-5")
 LLM_EFFORT = os.getenv("LLM_EFFORT", "low")
 

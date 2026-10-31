@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import config, stt
+from . import config, nlu, stt
 from .orchestrator import Orchestrator
 from .schemas import Escalation, TurnResponse
 from .state import SESSIONS, State, new_session
@@ -23,6 +23,7 @@ orch = Orchestrator()
 @app.on_event("startup")
 def _load_stt():
     stt.warm_up()
+    nlu.warm_up_llm()  # loads the local model in the background
     if hasattr(orch.backend, "warm"):
         orch.backend.warm()  # open the database connection before the first caller
 
