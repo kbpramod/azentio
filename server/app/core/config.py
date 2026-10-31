@@ -30,9 +30,16 @@ class Settings(BaseSettings):
     # Authentication & JWT
     SECRET_KEY: str = "azentio-banking-jwt-secret-key-change-in-production-2026"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15        # Short-lived access token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7          # 7-day refresh token
 
-    # Better Auth Configuration
+    # Cookie Security Settings
+    COOKIE_ACCESS_NAME: str = "azentio_access_token"
+    COOKIE_REFRESH_NAME: str = "azentio_refresh_token"
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_SECURE: bool = False                 # True in production HTTPS
+
+    # Better Auth Configuration (if needed)
     BETTER_AUTH_SECRET: Optional[str] = None
     BETTER_AUTH_API_KEY: Optional[str] = None
 
@@ -54,13 +61,12 @@ class Settings(BaseSettings):
             return ""
 
         url = v.strip().strip('"').strip("'")
-        # Convert standard Neon postgres URLs to asyncpg format
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)
         elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-        # Remove sslmode parameter if present, as asyncpg handles SSL via connect_args
+        # Remove sslmode query parameter if present, handled via asyncpg connect_args
         if "?sslmode=" in url:
             parts = url.split("?sslmode=")
             url = parts[0]
