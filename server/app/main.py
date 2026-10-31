@@ -26,6 +26,12 @@ async def init_database() -> None:
     engine = get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Safely ensure hashed_refresh_token column exists in Neon users table
+        try:
+            from sqlalchemy import text
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_refresh_token VARCHAR(255);"))
+        except Exception:
+            pass
     print("PostgreSQL Neon tables verified and migrations ready.")
 
     # Check and seed default demo customer in Neon
