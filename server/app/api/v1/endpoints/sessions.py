@@ -25,6 +25,8 @@ from app.services.session_service import (
     get_session_call,
 )
 from app.services.verification_service import verify_customer_identity
+from app.core.security import get_optional_current_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -37,18 +39,35 @@ router = APIRouter()
 )
 async def api_create_session(
     payload: SessionCreate = SessionCreate(),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SessionOut:
+    cust_id = payload.customer_id
+    if current_user and not cust_id:
+        cust_id = 'C1023' if current_user.email == 'customer@azentio.com' else current_user.email
+
     session, call = await create_session(
         db=db,
-        customer_id=payload.customer_id,
+        customer_id=cust_id,
         channel=payload.channel,
     )
-    greeting = (
-        "Hello! I am your Azentio Banking Voice Assistant. "
-        "I can help you check your account balance, loan application status, and upcoming EMI schedules. "
-        "How may I assist you today?"
-    )
+
+    if current_user:
+        session.verified = True
+        session.current_state = 'VERIFIED'
+        await db.commit()
+        await db.refresh(session)
+        greeting = (
+            f"Hello {current_user.full_name}! Welcome back to your Azentio Voice Banking Assistant. "
+            f"You are signed in as {current_user.email} (Account: {current_user.account_number}). "
+            f"How can I assist you with your accounts, loans, or transactions today?"
+        )
+    else:
+        greeting = (
+            "Hello! Welcome to Azentio Banking Voice Assistant. "
+            "I can answer any general banking FAQs regarding our services, branch hours, loan products, and interest rates. "
+            "To access personal account details or check your balance, please sign in."
+        )
     return SessionOut(
         session_id=session.session_id,
         call_id=call.call_id,
@@ -147,6 +166,7 @@ async def api_verify_customer(
 async def api_process_turn(
     session_id: str,
     request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TurnResponse:
     session = await get_session(db, session_id)
@@ -175,6 +195,7 @@ async def api_process_turn(
         call=call,
         text=text,
         input_type=input_type,
+        current_user=current_user,
     )
     return TurnResponse(**result)
 
