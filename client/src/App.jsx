@@ -4,6 +4,7 @@ import LandingPage from './components/LandingPage';
 import Dashboard from './components/Dashboard';
 import AuthModal from './components/AuthModal';
 import InfoModal from './components/InfoModal';
+import SupportWidget from './components/SupportWidget';
 import {
   authApi,
   getStoredUser,
@@ -133,6 +134,9 @@ export default function App() {
         type={infoModal.type}
         onClose={() => setInfoModal({ isOpen: false, type: 'about' })}
       />
+
+      {/* Floating 24/7 Support Desk (Speak / Voice & Type) */}
+      <SupportWidget user={user} />
     </div>
   );
 }

@@ -185,3 +185,42 @@ export const bankingApi = {
     });
   },
 };
+
+export const supportApi = {
+  sendVoice: async (audioBlob, metadata = {}) => {
+    const formData = new FormData();
+    formData.append('audio_file', audioBlob, 'support_voice.webm');
+    if (metadata.customer_name) formData.append('customer_name', metadata.customer_name);
+    if (metadata.account_number) formData.append('account_number', metadata.account_number);
+    if (metadata.note) formData.append('note', metadata.note);
+
+    const response = await fetch(`${API_BASE}/support/voice`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || data.message || 'Failed to submit voice recording');
+    }
+    return data;
+  },
+
+  sendText: async ({ message, customerName, accountNumber, category }) => {
+    return apiRequest('/support/text', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        customer_name: customerName,
+        account_number: accountNumber,
+        category,
+      }),
+    });
+  },
+
+  getStatus: async () => {
+    return apiRequest('/support/status');
+  },
+};
+
