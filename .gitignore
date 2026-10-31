@@ -1,0 +1,11 @@
+# Root gitignore
+node_modules/
+dist/
+venv/
+.env
+*.db
+*.sqlite
+*.sqlite3
+server/banking.db
+__pycache__/
+.pytest_cache/
