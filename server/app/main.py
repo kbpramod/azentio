@@ -2,19 +2,91 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select, text
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.exceptions import VaaniException, vaani_exception_handler
+from app.core.security import hash_password
 from app.db.seed import seed_synthetic_data
-from app.db.session import get_engine
+from app.db.session import Base, get_engine, get_session_maker
+import app.models
+from app.models.transaction import Transaction
+from app.models.user import User
 
 
 async def init_database() -> None:
-    """Create database tables and seed repeatable synthetic banking data."""
+    """Create database tables and seed initial demo data in PostgreSQL Neon."""
+    if not settings.DATABASE_URL:
+        print("\n" + "=" * 70)
+        print(" [DATABASE CONFIGURATION REQUIRED]")
+        print(" Neon PostgreSQL DATABASE_URL is not set in server/.env.")
+        print(" Please paste your Neon connection string into server/.env:")
+        print(' DATABASE_URL="postgresql://username:password@ep-xyz.neon.tech/neondb?sslmode=require"')
+        print("=" * 70 + "\n")
+        return
+
+    print("Connecting to PostgreSQL Neon cluster...")
+    engine = get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        # Safely ensure hashed_refresh_token column exists in Neon users table
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_refresh_token VARCHAR(255);"))
+        except Exception:
+            pass
+    print("PostgreSQL Neon tables verified and migrations ready.")
+
+    # Check and seed default demo customer in Neon
+    session_maker = get_session_maker()
+    async with session_maker() as session:
+        result = await session.execute(
+            select(User).where(User.email == "customer@azentio.com")
+        )
+        existing = result.scalar_one_or_none()
+        if not existing:
+            demo_user = User(
+                email="customer@azentio.com",
+                full_name="Alex Mercer",
+                hashed_password=hash_password("password123"),
+                role="customer",
+                account_number="AZ-882194",
+                balance=3450.75,
+                ai_credits=500,
+                is_active=True,
+            )
+            session.add(demo_user)
+            await session.flush()
+
+            tx1 = Transaction(
+                user_id=demo_user.id,
+                type="deposit",
+                amount=3000.00,
+                description="Salary Direct Deposit - Azentio Corp",
+                status="completed",
+            )
+            tx2 = Transaction(
+                user_id=demo_user.id,
+                type="transfer_out",
+                amount=45.25,
+                description="Coffee & Bakery Mart",
+                status="completed",
+            )
+            tx3 = Transaction(
+                user_id=demo_user.id,
+                type="deposit",
+                amount=500.00,
+                description="Mobile Check Deposit",
+                status="completed",
+            )
+            session.add_all([tx1, tx2, tx3])
+            await session.commit()
+            print("Successfully seeded demo customer into PostgreSQL Neon: customer@azentio.com")
+
+    # Seed synthetic banking dataset (LOS, LMS, CBS, CSM)
     try:
         await seed_synthetic_data()
     except Exception as e:
-        print(f"Database initialization warning: {e}")
+        print(f"Synthetic data seeding warning: {e}")
 
 
 @asynccontextmanager

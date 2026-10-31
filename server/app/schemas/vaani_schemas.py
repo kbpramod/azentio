@@ -19,6 +19,7 @@ class SessionOut(BaseModel):
     failed_verification_attempts: int
     locked: bool
     created_at: datetime
+    greeting: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

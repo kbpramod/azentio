@@ -1,32 +1,44 @@
 import asyncio
-from sqlalchemy import text
-from app.db.session import get_engine
+import time
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from app.core.config import settings
+from app.db.session import get_ssl_context
+from app.models.user import User
 
-TZ_CONVERSIONS = [
-    "ALTER TABLE transactions ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE;",
-    "ALTER TABLE users ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE;",
-    "ALTER TABLE cbs_transactions ALTER COLUMN transaction_date TYPE TIMESTAMP WITH TIME ZONE;",
-    "ALTER TABLE sessions ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE;",
-    "ALTER TABLE sessions ALTER COLUMN updated_at TYPE TIMESTAMP WITH TIME ZONE;",
-    "ALTER TABLE sessions ALTER COLUMN ended_at TYPE TIMESTAMP WITH TIME ZONE;",
-    "ALTER TABLE conversation_turns ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE;",
-    "ALTER TABLE escalations ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE;",
-    "ALTER TABLE audit_events ALTER COLUMN created_at TYPE TIMESTAMP WITH TIME ZONE;",
-]
+async def benchmark():
+    engine = create_async_engine(
+        settings.DATABASE_URL,
+        connect_args={"ssl": get_ssl_context(), "statement_cache_size": 0},
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=False,
+    )
+    session_maker = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
-async def check():
-    engine = get_engine()
-    async with engine.connect() as conn:
-        await conn.execution_options(isolation_level="AUTOCOMMIT")
-        for stmt in TZ_CONVERSIONS:
-            await conn.execute(text(stmt))
-            print("CONVERTED:", stmt)
+    print("--- 1st query with statement_cache_size=0, pool_pre_ping=False ---")
+    t0 = time.perf_counter()
+    async with session_maker() as session:
+        res = await session.execute(select(User).where(User.email == "customer@azentio.com"))
+        user = res.scalar_one_or_none()
+        print(f"User: {user.email if user else None}")
+    t1 = time.perf_counter()
+    print(f"1st query time: {(t1 - t0) * 1000:.2f} ms")
+
+    print("\n--- 2nd query (warm connection) ---")
+    t2 = time.perf_counter()
+    async with session_maker() as session:
+        res = await session.execute(select(User).where(User.email == "customer@azentio.com"))
+        user = res.scalar_one_or_none()
+    t3 = time.perf_counter()
+    print(f"2nd query time: {(t3 - t2) * 1000:.2f} ms")
 
     await engine.dispose()
-    print("ALL COLUMNS CONVERTED TO TIMESTAMPTZ SUCCESSFULLY!")
 
 if __name__ == "__main__":
-    asyncio.run(check())
+    asyncio.run(benchmark())
+
+
 
 
 
