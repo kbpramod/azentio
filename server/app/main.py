@@ -2,11 +2,16 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import select, text
 from app.api.v1.api import api_router
 from app.core.config import settings
 from app.core.exceptions import VaaniException, vaani_exception_handler
+from app.core.security import hash_password
 from app.db.seed import seed_synthetic_data
-from app.db.session import get_engine
+from app.db.session import Base, get_engine, get_session_maker
+import app.models
+from app.models.transaction import Transaction
+from app.models.user import User
 
 
 async def init_database() -> None:
@@ -26,7 +31,6 @@ async def init_database() -> None:
         await conn.run_sync(Base.metadata.create_all)
         # Safely ensure hashed_refresh_token column exists in Neon users table
         try:
-            from sqlalchemy import text
             await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_refresh_token VARCHAR(255);"))
         except Exception:
             pass
@@ -77,6 +81,12 @@ async def init_database() -> None:
             session.add_all([tx1, tx2, tx3])
             await session.commit()
             print("Successfully seeded demo customer into PostgreSQL Neon: customer@azentio.com")
+
+    # Seed synthetic banking dataset (LOS, LMS, CBS, CSM)
+    try:
+        await seed_synthetic_data()
+    except Exception as e:
+        print(f"Synthetic data seeding warning: {e}")
 
 
 @asynccontextmanager

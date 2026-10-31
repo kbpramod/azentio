@@ -197,3 +197,15 @@ async def get_current_user(
             detail="Inactive user account.",
         )
     return user
+
+
+async def get_optional_current_user(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: AsyncSession = Depends(get_db),
+):
+    """Retrieve user if authenticated, otherwise return None without raising 401."""
+    try:
+        return await get_current_user(request, credentials, db)
+    except Exception:
+        return None

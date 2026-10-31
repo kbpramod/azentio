@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.integrations.ai_pipeline import process_ai_turn
+from app.models.vaani_models import Customer, Session
 from app.schemas.vaani_schemas import (
     EndSessionRequest,
     EndSessionResponse,
@@ -22,6 +25,8 @@ from app.services.session_service import (
     get_session_call,
 )
 from app.services.verification_service import verify_customer_identity
+from app.core.security import get_optional_current_user
+from app.models.user import User
 
 router = APIRouter()
 
@@ -34,13 +39,35 @@ router = APIRouter()
 )
 async def api_create_session(
     payload: SessionCreate = SessionCreate(),
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SessionOut:
+    cust_id = payload.customer_id
+    if current_user and not cust_id:
+        cust_id = 'C1023' if current_user.email == 'customer@azentio.com' else current_user.email
+
     session, call = await create_session(
         db=db,
-        customer_id=payload.customer_id,
+        customer_id=cust_id,
         channel=payload.channel,
     )
+
+    if current_user:
+        session.verified = True
+        session.current_state = 'VERIFIED'
+        await db.commit()
+        await db.refresh(session)
+        greeting = (
+            f"Hello {current_user.full_name}! Welcome back to your Azentio Voice Banking Assistant. "
+            f"You are signed in as {current_user.email} (Account: {current_user.account_number}). "
+            f"How can I assist you with your accounts, loans, or transactions today?"
+        )
+    else:
+        greeting = (
+            "Hello! Welcome to Azentio Banking Voice Assistant. "
+            "I can answer any general banking FAQs regarding our services, branch hours, loan products, and interest rates. "
+            "To access personal account details or check your balance, please sign in."
+        )
     return SessionOut(
         session_id=session.session_id,
         call_id=call.call_id,
@@ -50,7 +77,55 @@ async def api_create_session(
         failed_verification_attempts=session.failed_verification_attempts,
         locked=session.locked,
         created_at=session.created_at,
+        greeting=greeting,
     )
+
+
+@router.get(
+    "",
+    response_model=List[SessionOut],
+    summary="List active sessions",
+)
+async def api_list_sessions(
+    db: AsyncSession = Depends(get_db),
+) -> List[SessionOut]:
+    result = await db.execute(select(Session).order_by(Session.created_at.desc()).limit(50))
+    sessions = result.scalars().all()
+    return [
+        SessionOut(
+            session_id=s.session_id,
+            call_id=s.session_id,
+            customer_id=s.customer_id,
+            current_state=s.current_state,
+            verified=s.verified,
+            failed_verification_attempts=s.failed_verification_attempts,
+            locked=s.locked,
+            created_at=s.created_at,
+        )
+        for s in sessions
+    ]
+
+
+@router.get(
+    "/{session_id}",
+    summary="Session details and status",
+)
+async def api_get_session(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    session = await get_session(db, session_id)
+    call = await get_session_call(db, session_id)
+    return {
+        "session_id": session.session_id,
+        "call_id": call.call_id if call else None,
+        "customer_id": session.customer_id,
+        "current_state": session.current_state,
+        "verified": session.verified,
+        "failed_verification_attempts": session.failed_verification_attempts,
+        "locked": session.locked,
+        "created_at": session.created_at,
+    }
 
 
 @router.post(
@@ -69,9 +144,6 @@ async def api_verify_customer(
         customer_id=payload.customer_id,
         dob=payload.dob,
     )
-    # Fetch customer name for friendly return message
-    from sqlalchemy import select
-    from app.models.vaani_models import Customer
     c_res = await db.execute(select(Customer).where(Customer.customer_id == payload.customer_id))
     cust = c_res.scalar_one_or_none()
     cust_name = cust.customer_name if cust else payload.customer_id
@@ -93,7 +165,8 @@ async def api_verify_customer(
 )
 async def api_process_turn(
     session_id: str,
-    payload: TurnRequest,
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TurnResponse:
     session = await get_session(db, session_id)
@@ -102,12 +175,27 @@ async def api_process_turn(
         from app.core.exceptions import ResourceNotFoundException
         raise ResourceNotFoundException(f"No active call associated with session '{session_id}'.")
 
+    text = ""
+    input_type = "voice_transcript"
+
+    if request.headers.get("content-type", "").startswith("multipart/form-data"):
+        form = await request.form()
+        text = str(form.get("text") or form.get("transcript") or "")
+        input_type = "voice_audio"
+        if not text:
+            text = "Voice message received"
+    else:
+        body = await request.json()
+        text = body.get("text", "")
+        input_type = body.get("input_type", "voice_transcript")
+
     result = await process_ai_turn(
         db=db,
         session=session,
         call=call,
-        text=payload.text,
-        input_type=payload.input_type,
+        text=text,
+        input_type=input_type,
+        current_user=current_user,
     )
     return TurnResponse(**result)
 
@@ -119,15 +207,19 @@ async def api_process_turn(
 )
 async def api_escalate_session(
     session_id: str,
-    payload: EscalateRequest,
+    payload: Optional[EscalateRequest] = None,
     db: AsyncSession = Depends(get_db),
 ) -> EscalateResponse:
+    reason = payload.reason if payload else "Customer requested human supervisor"
+    category = (payload.category if payload and payload.category else "complaint")
+    priority = (payload.priority if payload and payload.priority else "HIGH")
+
     session, call, escalation, ticket_id = await escalate_session(
         db=db,
         session_id=session_id,
-        reason=payload.reason,
-        category=payload.category or "complaint",
-        priority=payload.priority or "HIGH",
+        reason=reason,
+        category=category,
+        priority=priority,
     )
     return EscalateResponse(
         session_id=session.session_id,
@@ -146,13 +238,14 @@ async def api_escalate_session(
 )
 async def api_end_session(
     session_id: str,
-    payload: EndSessionRequest = EndSessionRequest(),
+    payload: Optional[EndSessionRequest] = None,
     db: AsyncSession = Depends(get_db),
 ) -> EndSessionResponse:
+    reason = payload.reason if payload and payload.reason else "Customer ended interaction"
     session, call = await end_session(
         db=db,
         session_id=session_id,
-        reason=payload.reason,
+        reason=reason,
     )
     return EndSessionResponse(
         session_id=session.session_id,
@@ -160,51 +253,3 @@ async def api_end_session(
         status=session.current_state,
         message="Session terminated successfully.",
     )
-
-"""VaaniDesk voice/chat sessions. Forwards to the AI orchestration service.
-
-Frontend flow: POST /sessions -> POST /sessions/{id}/turn (text or audio) ... -> POST /sessions/{id}/end
-Verification happens inside the conversation (caller says customer ID + date of birth).
-"""
-from fastapi import APIRouter, Request
-
-from app.integrations.ai_pipeline import forward
-
-router = APIRouter()
-
-
-@router.post("", summary="Start a voice/chat session (returns greeting)")
-async def start_session():
-    return await forward("POST", "/sessions")
-
-
-@router.get("", summary="List sessions (ops dashboard)")
-async def list_sessions():
-    return await forward("GET", "/sessions")
-
-
-@router.get("/{session_id}", summary="Session transcript, tickets, escalation and audit trace")
-async def get_session(session_id: str):
-    return await forward("GET", f"/sessions/{session_id}")
-
-
-@router.post("/{session_id}/turn", summary="Send one customer turn as JSON {text} or multipart audio")
-async def turn(session_id: str, request: Request):
-    if request.headers.get("content-type", "").startswith("multipart/form-data"):
-        form = await request.form()
-        audio = form.get("audio")
-        files = {"audio": (audio.filename or "audio.webm", await audio.read(),
-                           audio.content_type or "application/octet-stream")}
-        return await forward("POST", f"/sessions/{session_id}/turn", files=files,
-                             data={"lang": str(form.get("lang") or "en")})
-    return await forward("POST", f"/sessions/{session_id}/turn", json=await request.json())
-
-
-@router.post("/{session_id}/escalate", summary="Customer pressed 'Talk to a human'")
-async def escalate(session_id: str):
-    return await forward("POST", f"/sessions/{session_id}/escalate")
-
-
-@router.post("/{session_id}/end", summary="End the call")
-async def end(session_id: str):
-    return await forward("POST", f"/sessions/{session_id}/end")
