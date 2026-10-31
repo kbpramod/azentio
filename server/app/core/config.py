@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     AICREDITS_API_KEY: Optional[str] = None
     AICREDITS_BASE_URL: str = "https://api.aicredits.com/v1"
 
+    # VaaniDesk AI orchestration service (azentio/ai)
+    AI_SERVICE_URL: str = "http://127.0.0.1:8001"
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:

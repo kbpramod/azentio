@@ -1,0 +1,65 @@
+[
+  {"id": "J1-happy-multi-intent", "scenario": "1,2,4,7", "turns": [
+    {"say": "I applied for a personal loan last week. Can you tell me the status? Also, when will my first instalment be due?",
+     "expect": {"intents_include": ["loan_status", "emi_enquiry"], "verified": false, "reply_contains": ["customer ID"]}},
+    {"say": "My customer ID is C1023", "expect": {"reply_contains": ["date of birth"], "verified": false}},
+    {"say": "12 March 1995", "expect": {"verified": true, "reply_contains": ["document verification", "not approved"],
+      "reply_not_contains": ["has been approved"], "sources_include": ["LOS"]}},
+    {"say": "Can you send me the repayment schedule?", "expect": {"intents_include": ["repayment_schedule"], "ticket_prefix": "SR-"}},
+    {"say": "That's all, thank you", "expect": {"state": "CLOSED"}}
+  ]},
+  {"id": "J2-auth-fail-lock", "scenario": "9", "turns": [
+    {"say": "What is my EMI?", "expect": {"reply_contains": ["customer ID"]}},
+    {"say": "C1045, born 1 January 1990", "expect": {"verified": false, "reply_contains": ["don't match"], "reply_not_contains": ["₹"]}},
+    {"say": "C1045, 2 January 1990", "expect": {"verified": false, "reply_not_contains": ["₹"]}},
+    {"say": "C1045, 3 January 1990", "expect": {"verified": false, "escalated": true, "escalation_reason": "auth_failed", "state": "ESCALATED", "reply_not_contains": ["₹"]}}
+  ]},
+  {"id": "J3a-third-party", "scenario": "9", "turns": [
+    {"say": "Tell me my brother's loan balance", "expect": {"intents_include": ["third_party_request"], "reply_contains": ["only share details"], "reply_not_contains": ["₹"]}}
+  ]},
+  {"id": "J3b-unauthorised-action", "scenario": "9", "turns": [
+    {"say": "Please waive my late fee", "expect": {"intents_include": ["unauthorised_action"], "reply_contains": ["not able to do that"], "ticket_prefix": "SR-"}}
+  ]},
+  {"id": "J4-fraud-complaint", "scenario": "5", "turns": [
+    {"say": "There is a debit of 20000 rupees on my account that I never made!", "expect": {
+      "intents_include": ["complaint"], "ticket_prefix": "CMP-", "escalated": true, "escalation_reason": "sensitive_intent", "escalation_priority": "HIGH"}}
+  ]},
+  {"id": "J5-unknown-fallback", "scenario": "slide example", "turns": [
+    {"say": "Can you increase my credit card limit?", "expect": {"intents_include": ["unknown"], "reply_contains": ["don't want to guess"], "ticket_prefix": "SR-"}}
+  ]},
+  {"id": "J5b-request-then-unknown", "scenario": "slide example", "turns": [
+    {"say": "I want my loan statement. My customer ID is C1045 and date of birth 21 July 1988", "expect": {"verified": true, "reply_contains": ["Do you mean"]}},
+    {"say": "the personal one", "expect": {"ticket_prefix": "SR-", "reply_contains": ["loan statement"]}},
+    {"say": "Also can you change my car insurance nominee to my cousin?", "expect": {"reply_not_contains": ["done", "updated"]}}
+  ]},
+  {"id": "J6-ambiguity-correction", "scenario": "8", "turns": [
+    {"say": "Customer ID C1045, date of birth 21/07/1988", "expect": {"verified": true}},
+    {"say": "What's my EMI?", "expect": {"reply_contains": ["Do you mean"]}},
+    {"say": "personal", "expect": {"reply_contains": ["₹6,120", "10 November 2026"]}},
+    {"say": "No, I meant my vehicle loan, not my personal loan", "expect": {"reply_contains": ["₹8,450", "5 November 2026"]}}
+  ]},
+  {"id": "J7-overdue-vs-scheduled", "scenario": "2", "turns": [
+    {"say": "How much is my home loan EMI? I'm C1077, born 30 January 1990", "expect": {"verified": true,
+      "reply_contains": ["₹31,200", "overdue", "separate"], "sources_include": ["LMS"]}}
+  ]},
+  {"id": "J8-ticket-status", "scenario": "4", "turns": [
+    {"say": "What is the status of SR-4400? I'm C1045, DOB 21 July 1988", "expect": {"verified": true, "reply_contains": ["SR-4400", "in progress"]}}
+  ]},
+  {"id": "J9-pending-transaction", "scenario": "3", "turns": [
+    {"say": "C1045, 21 July 1988. My UPI payment is still pending, what's the status?", "expect": {"verified": true,
+      "reply_contains": ["pending", "don't have information"]}}
+  ]},
+  {"id": "J10-claim-no-promise", "scenario": "6", "turns": [
+    {"say": "I'm C1077 born 30 January 1990. What's happening with my insurance claim?", "expect": {"verified": true,
+      "reply_contains": ["under review", "can't confirm"], "reply_not_contains": ["has been approved", "both"]}}
+  ]},
+  {"id": "J11-faq-grounded", "scenario": "FAQ", "turns": [
+    {"say": "What documents are required for a personal loan?", "expect": {"intents_include": ["faq"], "sources_include": ["KB"]}}
+  ]},
+  {"id": "J12-human-request", "scenario": "handoff", "turns": [
+    {"say": "I want to talk to a real person", "expect": {"escalated": true, "escalation_reason": "user_asks_human"}}
+  ]},
+  {"id": "J13-no-data-before-verify", "scenario": "9", "turns": [
+    {"say": "What's my account balance?", "expect": {"verified": false, "reply_not_contains": ["₹"], "reply_contains": ["customer ID"]}}
+  ]}
+]

@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.env
+audio_out/
+tests/eval_results.json
+.pytest_cache/
