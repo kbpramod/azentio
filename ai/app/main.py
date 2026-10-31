@@ -23,6 +23,8 @@ orch = Orchestrator()
 @app.on_event("startup")
 def _load_stt():
     stt.warm_up()
+    if hasattr(orch.backend, "warm"):
+        orch.backend.warm()  # open the database connection before the first caller
 
 
 def _err(status, code, message, retryable=False):

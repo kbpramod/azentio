@@ -16,6 +16,11 @@ from . import config
 
 _model = None
 
+# Domain words bias Whisper toward banking vocabulary (generic list, not the test sentences)
+DOMAIN_PROMPT = ("Bank customer service call. Customer ID, date of birth, EMI, instalment, loan application, "
+                 "personal loan, vehicle loan, home loan, repayment schedule, statement, insurance claim, policy, "
+                 "premium, complaint, unauthorised debit, transaction, account balance, rupees.")
+
 
 class STTError(Exception):
     pass
@@ -61,6 +66,7 @@ def transcribe_bytes(data: bytes, filename: str = "audio.webm", language: str = 
         segments, _info = _get_model().transcribe(
             samples, language=language, beam_size=config.STT_BEAM, vad_filter=True,  # VAD trims silence/noise
             temperature=0.0,  # reproducible output for the same file
+            initial_prompt=DOMAIN_PROMPT,
         )
         segments = list(segments)
     text = " ".join(s.text.strip() for s in segments).strip()

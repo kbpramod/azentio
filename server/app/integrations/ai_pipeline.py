@@ -22,6 +22,7 @@ from app.models.vaani_models import (
     Call,
     ConversationTurn,
     Customer,
+    Escalation,
     Loan,
     LoanApplication,
     Session,
@@ -278,10 +279,28 @@ async def process_ai_turn(
                                  metadata={"via": "voice_agent", "customer_id": ai["customer_id"]})
     escalation = ai.get("escalation")
     if escalation and session.current_state != "ESCALATED":
+        # same record the manual /escalate endpoint creates, so the ops escalation queue shows it;
+        # reuse the AI's ticket (e.g. the fraud complaint) instead of opening a second one
+        existing = (await db.execute(
+            select(Escalation).where(Escalation.session_id == session.session_id)
+        )).scalars().first()
+        if existing is None:
+            escalation_id = f"ESC-{uuid.uuid4().hex[:6].upper()}"
+            summary = escalation.get("summary") or ""
+            db.add(Escalation(
+                escalation_id=escalation_id, call_id=call.call_id, session_id=session.session_id,
+                customer_id=session.customer_id,
+                reason=f"{escalation.get('reason')} ({escalation.get('priority', 'NORMAL')}): {summary}"[:1000],
+                ticket_id=escalation.get("ticket_id"), status="PENDING_AGENT",
+            ))
+            await record_audit_event(db=db, event_type="ESCALATION_CREATED", event_status="SUCCESS",
+                                     session_id=session.session_id, call_id=call.call_id,
+                                     metadata={"reason": escalation.get("reason"), "priority": escalation.get("priority"),
+                                               "ticket_id": escalation.get("ticket_id"),
+                                               "escalation_id": escalation_id, "via": "voice_agent"})
+        call.escalation_status = "ESCALATED"
+        call.outcome = "ESCALATED"
         session.current_state = "ESCALATED"
-        await record_audit_event(db=db, event_type="ESCALATION", event_status="SUCCESS",
-                                 session_id=session.session_id, call_id=call.call_id,
-                                 metadata={"reason": escalation.get("reason"), "priority": escalation.get("priority")})
 
     count_res = await db.execute(
         select(func.count(ConversationTurn.turn_id)).where(ConversationTurn.call_id == call.call_id)

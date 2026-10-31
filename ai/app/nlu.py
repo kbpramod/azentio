@@ -47,6 +47,8 @@ def _entities(text: str) -> Entities:
     t = text.lower()
     e = Entities()
     m = re.search(r"\bc\s*-?\s*(\d{4})\b", t)
+    # all customer IDs start with C; right after "customer id", accept a misheard letter (T1023, see 1023)
+    m = m or re.search(r"customer\s*id\s*(?:is|:)?\s*(?:[a-z]|see|sea)\s*-?\s*(\d{4})\b", t)
     if m:
         e.customer_id = f"C{m[1]}"
     e.dob = _dob(text)

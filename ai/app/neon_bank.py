@@ -6,6 +6,7 @@ Also records calls, turns and audit events for the ops dashboard.
 """
 import json
 import threading
+import time
 from datetime import date, datetime
 
 import psycopg
@@ -14,12 +15,22 @@ from psycopg.rows import dict_row
 from . import config
 
 
+# the server seed uses different product names; the agent speaks in personal / vehicle / home
+PRODUCT_ALIASES = {"home_loan": "home", "housing": "home", "auto_loan": "vehicle", "car": "vehicle",
+                   "vehicle_loan": "vehicle", "personal_loan": "personal"}
+
+
 def _clean(row: dict | None, source: str) -> dict | None:
     if row is None:
         return None
     out = {}
     for k, v in row.items():
         out[k] = v.isoformat() if isinstance(v, (date, datetime)) else v
+    if isinstance(out.get("product"), str):
+        out["product"] = PRODUCT_ALIASES.get(out["product"].lower(), out["product"].lower())
+    for k in ("amount", "outstanding", "emi_amount", "overdue_amount", "principal", "balance", "premium"):
+        if isinstance(out.get(k), float) and out[k].is_integer():
+            out[k] = int(out[k])  # server seed stores some amounts as floats
     out["source"] = source
     return out
 
@@ -31,6 +42,7 @@ class NeonBank:
             raise RuntimeError("DATABASE_URL is not set (ai/.env)")
         self._conn = None
         self._lock = threading.Lock()
+        self._cache = {}  # customer_id -> (loaded_at, profile)
 
     # one autocommit connection, reopened if Neon drops it
     def _q(self, sql: str, params=(), one=False):
@@ -48,75 +60,133 @@ class NeonBank:
                     if attempt == 2:
                         raise
 
-    def _rows(self, sql, params, source):
-        return [_clean(r, source) for r in self._q(sql, params)]
+    def warm(self):
+        """Open the database connection at startup (the first connect to Neon takes ~1.5 s)."""
+        try:
+            self._q("SELECT 1", one=True)
+        except Exception:
+            pass
 
-    # --- auth
+    # --- one round trip loads everything the agent may need about a verified customer.
+    # Cached for the rest of the call: the database is in another region (~0.25 s per query).
+    PROFILE_SQL = """
+        SELECT c.name,
+          (SELECT COALESCE(json_agg(a ORDER BY a.applied_on DESC), '[]') FROM loan_applications a
+             WHERE a.customer_id = c.customer_id) AS applications,
+          (SELECT COALESCE(json_agg(l ORDER BY l.loan_id), '[]') FROM loans l
+             WHERE l.customer_id = c.customer_id AND l.status = 'ACTIVE') AS loans,
+          (SELECT COALESCE(json_agg(ac ORDER BY ac.account_id), '[]') FROM accounts ac
+             WHERE ac.customer_id = c.customer_id) AS accounts,
+          (SELECT COALESCE(json_agg(t ORDER BY t.date), '[]') FROM bank_transactions t
+             JOIN accounts ac USING (account_id) WHERE ac.customer_id = c.customer_id) AS transactions,
+          (SELECT COALESCE(json_agg(p ORDER BY p.policy_id), '[]') FROM policies p
+             WHERE p.customer_id = c.customer_id) AS policies,
+          (SELECT COALESCE(json_agg(cl ORDER BY cl.filed_on), '[]') FROM claims cl
+             JOIN policies p USING (policy_id) WHERE p.customer_id = c.customer_id) AS claims,
+          (SELECT COALESCE(json_agg(tk ORDER BY tk.created_at), '[]') FROM tickets tk
+             WHERE tk.customer_id = c.customer_id) AS tickets
+        FROM customers c WHERE c.customer_id = %(cid)s {extra}"""
+    PROFILE_TTL = 120  # seconds
+    SOURCES = {"applications": "LOS-SIMULATED", "loans": "LMS-SIMULATED", "accounts": "CBS-SIMULATED",
+               "transactions": "CBS-SIMULATED", "policies": "INS-SIMULATED", "claims": "INS-SIMULATED",
+               "tickets": "CSM-SIMULATED"}
+
+
+
+    def _store(self, customer_id, row):
+        prof = {"name": row["name"]}
+        for k, src in self.SOURCES.items():
+            prof[k] = [_clean(r, src) for r in (row[k] or [])]
+        self._cache[customer_id] = (time.monotonic(), prof)
+        return prof
+
+    def _profile(self, customer_id):
+        hit = self._cache.get(customer_id)
+        if hit and time.monotonic() - hit[0] < self.PROFILE_TTL:
+            return hit[1]
+        row = self._q(self.PROFILE_SQL.format(extra=""), {"cid": customer_id}, one=True)
+        return self._store(customer_id, row) if row else {"name": None, **{k: [] for k in self.SOURCES}}
+
+    # --- auth: verifies AND preloads the profile in the same round trip
     def verify(self, customer_id, dob):
-        r = self._q("SELECT 1 FROM customers WHERE customer_id=%s AND dob=%s", (customer_id, dob), one=True)
-        return r is not None
+        row = self._q(self.PROFILE_SQL.format(extra="AND c.dob = %(dob)s"),
+                      {"cid": customer_id, "dob": dob}, one=True)
+        if row is None:
+            return False
+        self._store(customer_id, row)
+        return True
 
     def customer(self, customer_id):
+        hit = self._cache.get(customer_id)
+        if hit:
+            return {"customer_id": customer_id, "name": hit[1]["name"], "source": "CORE-SIMULATED"}
         return _clean(self._q("SELECT customer_id, name FROM customers WHERE customer_id=%s",
                               (customer_id,), one=True), "CORE-SIMULATED")
 
-    # --- LOS / LMS / CBS / INS
+    # --- LOS / LMS / CBS / INS (served from the profile)
     def applications(self, customer_id):
-        return self._rows("SELECT * FROM loan_applications WHERE customer_id=%s ORDER BY applied_on DESC",
-                          (customer_id,), "LOS-SIMULATED")
+        return self._profile(customer_id)["applications"]
 
     def loans(self, customer_id):
-        return self._rows("SELECT * FROM loans WHERE customer_id=%s AND status='ACTIVE' ORDER BY loan_id",
-                          (customer_id,), "LMS-SIMULATED")
+        return self._profile(customer_id)["loans"]
 
     def accounts(self, customer_id):
-        return self._rows("SELECT * FROM accounts WHERE customer_id=%s ORDER BY account_id",
-                          (customer_id,), "CBS-SIMULATED")
+        return self._profile(customer_id)["accounts"]
 
     def transactions(self, customer_id):
-        return self._rows("SELECT t.* FROM bank_transactions t JOIN accounts a USING (account_id) "
-                          "WHERE a.customer_id=%s ORDER BY t.date", (customer_id,), "CBS-SIMULATED")
+        return self._profile(customer_id)["transactions"]
 
     def policies(self, customer_id):
-        return self._rows("SELECT * FROM policies WHERE customer_id=%s ORDER BY policy_id",
-                          (customer_id,), "INS-SIMULATED")
+        return self._profile(customer_id)["policies"]
 
     def claims(self, customer_id):
-        return self._rows("SELECT c.* FROM claims c JOIN policies p USING (policy_id) "
-                          "WHERE p.customer_id=%s ORDER BY c.filed_on", (customer_id,), "INS-SIMULATED")
+        return self._profile(customer_id)["claims"]
 
     # --- CSM tickets
+    TICKET_COLS = ("customer_id", "type", "category", "priority", "summary", "escalated",
+                   "escalation_reason", "call_id", "idempotency_key")
+
     def create_ticket(self, payload: dict) -> dict:
-        key = payload.get("idempotency_key")
-        if key:
-            existing = self._q("SELECT * FROM tickets WHERE idempotency_key=%s", (key,), one=True)
-            if existing:
-                return _clean(existing, "CSM-SIMULATED")
+        """One round trip: return the existing ticket for this idempotency key, or insert the next number."""
         prefix = "CMP" if payload["type"] == "complaint" else "SR"
         start = 2210 if prefix == "CMP" else 4471
-        cols = ("customer_id", "type", "category", "priority", "summary", "escalated",
-                "escalation_reason", "call_id", "idempotency_key")
-        for _ in range(5):  # retry if two calls grab the same number
-            nxt = self._q(
-                # other services may use non-numeric IDs (e.g. SR-5F234A); only count numeric ones
-                "SELECT GREATEST(%s, COALESCE(MAX(split_part(ticket_id,'-',2)::int)+1, %s)) AS n "
-                "FROM tickets WHERE ticket_id ~ %s", (start, start, f"^{prefix}-[0-9]+$"), one=True)["n"]
-            tid = f"{prefix}-{nxt}"
+        cols = ", ".join(self.TICKET_COLS)
+        vals = ", ".join(f"%({c})s" for c in self.TICKET_COLS)
+        sql = f"""
+            WITH existing AS (SELECT * FROM tickets WHERE idempotency_key = %(idempotency_key)s),
+            nxt AS (  -- other services use non-numeric IDs (e.g. SR-5F234A); count numeric ones only
+              SELECT GREATEST(%(start)s, COALESCE(MAX(split_part(ticket_id, '-', 2)::int) + 1, %(start)s)) AS n
+              FROM tickets WHERE ticket_id ~ %(pattern)s),
+            ins AS (
+              INSERT INTO tickets (ticket_id, {cols})
+              SELECT %(prefix)s || '-' || n, {vals} FROM nxt
+              WHERE NOT EXISTS (SELECT 1 FROM existing)
+              RETURNING *)
+            SELECT * FROM ins UNION ALL SELECT * FROM existing"""
+        params = {**{c: payload.get(c) for c in self.TICKET_COLS},
+                  "start": start, "pattern": f"^{prefix}-[0-9]+$", "prefix": prefix}
+        for _ in range(5):  # retry if two calls grab the same number at once
             try:
-                row = self._q(
-                    f"INSERT INTO tickets (ticket_id, {', '.join(cols)}) VALUES (%s{', %s' * len(cols)}) RETURNING *",
-                    (tid, *[payload.get(c) for c in cols]), one=True)
-                return _clean(row, "CSM-SIMULATED")
+                ticket = _clean(self._q(sql, params, one=True), "CSM-SIMULATED")
+                break
             except psycopg.errors.UniqueViolation:
                 continue
-        raise RuntimeError("could not allocate ticket id")
+        else:
+            raise RuntimeError("could not allocate ticket id")
+        cid = payload.get("customer_id")
+        if cid in self._cache and all(t["ticket_id"] != ticket["ticket_id"] for t in self._cache[cid][1]["tickets"]):
+            self._cache[cid][1]["tickets"].append(ticket)
+        return ticket
 
     def get_ticket(self, ticket_id):
+        for _, prof in self._cache.values():
+            for t in prof["tickets"]:
+                if t["ticket_id"] == ticket_id:
+                    return t
         return _clean(self._q("SELECT * FROM tickets WHERE ticket_id=%s", (ticket_id,), one=True), "CSM-SIMULATED")
 
     def tickets_for(self, customer_id):
-        return self._rows("SELECT * FROM tickets WHERE customer_id=%s ORDER BY created_at",
-                          (customer_id,), "CSM-SIMULATED")
+        return self._profile(customer_id)["tickets"]
 
     # --- call history for the ops dashboard
     def record_turn(self, s, customer_text, reply, intents, stt_conf, latency_ms):
