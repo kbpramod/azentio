@@ -80,6 +80,28 @@ class EndSessionResponse(BaseModel):
     call_id: str
     status: str
     message: str
+    ticket_id: Optional[str] = None
+    escalated: Optional[bool] = False
+    escalation_ticket_id: Optional[str] = None
+
+
+class EscalationTicketOut(BaseModel):
+    escalation_ticket_id: str
+    ticket_id: Optional[str] = None
+    session_id: str
+    call_id: Optional[str] = None
+    customer_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_email: Optional[str] = None
+    reason: str
+    query_summary: Optional[str] = None
+    transcript: Optional[str] = None
+    ai_turns_count: int
+    status: str
+    priority: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 # ---------------- Banking Schemas ----------------

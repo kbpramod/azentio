@@ -99,7 +99,7 @@ class LoanApplication(Base):
     __tablename__ = "loan_applications"
 
     application_id = Column("app_id", String(50), primary_key=True, index=True)
-    customer_id = Column(String(50), ForeignKey("customers.customer_id"), nullable=False, index=True)
+    customer_id = Column(String(50), ForeignKey("customers.customer_id", ondelete="SET NULL"), nullable=True, index=True)
     product_type = Column("product", String(100), nullable=False)
     requested_amount = Column("amount", Float, nullable=False)
     applied_on = Column("applied_on", StringDate, default=date.today, nullable=False)
@@ -131,7 +131,7 @@ class Loan(Base):
     __tablename__ = "loans"
 
     loan_id = Column(String(50), primary_key=True, index=True)
-    customer_id = Column(String(50), ForeignKey("customers.customer_id"), nullable=False, index=True)
+    customer_id = Column(String(50), ForeignKey("customers.customer_id", ondelete="SET NULL"), nullable=True, index=True)
     product_type = Column("product", String(100), nullable=False)
     principal = Column("principal", Float, default=0.0, nullable=True)
     outstanding_amount = Column("outstanding", Float, nullable=False)
@@ -180,7 +180,7 @@ class Account(Base):
     __tablename__ = "accounts"
 
     account_id = Column(String(50), primary_key=True, index=True)
-    customer_id = Column(String(50), ForeignKey("customers.customer_id"), nullable=False, index=True)
+    customer_id = Column(String(50), ForeignKey("customers.customer_id", ondelete="SET NULL"), nullable=True, index=True)
     account_type = Column("type", String(50), default="savings", nullable=False)
     balance = Column("balance", Float, default=0.0, nullable=False)
     currency = Column("currency", String(10), default="INR", nullable=False)
@@ -272,7 +272,7 @@ class Ticket(Base):
     __tablename__ = "tickets"
 
     ticket_id = Column(String(50), primary_key=True, index=True)
-    customer_id = Column(String(50), ForeignKey("customers.customer_id"), nullable=False, index=True)
+    customer_id = Column(String(50), ForeignKey("customers.customer_id", ondelete="SET NULL"), nullable=True, index=True)
     session_id = Column(String(50), nullable=True, index=True)
     call_id = Column(String(50), nullable=True, index=True)
     ticket_type = Column("type", String(50), default="service_request", nullable=False)
@@ -318,4 +318,23 @@ class AuditEvent(Base):
     event_type = Column(String(100), nullable=False, index=True)
     event_status = Column(String(50), default="SUCCESS", nullable=False)
     safe_metadata = Column(JSON, default=dict, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class EscalationTicket(Base):
+    __tablename__ = "escalation_tickets"
+
+    escalation_ticket_id = Column(String(50), primary_key=True, index=True)
+    ticket_id = Column(String(50), nullable=True, index=True)
+    session_id = Column(String(50), nullable=False, index=True)
+    call_id = Column(String(50), nullable=True, index=True)
+    customer_id = Column(String(50), nullable=True, index=True)
+    customer_name = Column(String(100), nullable=True)
+    customer_email = Column(String(100), nullable=True)
+    reason = Column(Text, nullable=False)
+    query_summary = Column(Text, nullable=True)
+    transcript = Column(Text, nullable=True)
+    ai_turns_count = Column(Integer, default=0, nullable=False)
+    status = Column(String(50), default="PENDING_HUMAN_REVIEW", nullable=False)
+    priority = Column(String(20), default="HIGH", nullable=False)
     created_at = Column(DateTime(timezone=True), default=utcnow, nullable=False)
