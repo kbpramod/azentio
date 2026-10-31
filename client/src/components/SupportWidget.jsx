@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { supportApi } from '../services/api';
+import { agentApi, describeTurn } from '../services/api';
 import LiveVoiceAgent from './LiveVoiceAgent';
 
 export default function SupportWidget({ user }) {
@@ -165,11 +165,7 @@ export default function SupportWidget({ user }) {
     setIsSending(true);
 
     try {
-      const result = await supportApi.sendText({
-        message: text,
-        customerName: user?.full_name || 'Customer',
-        accountNumber: user?.account_number || '',
-      });
+      const result = await agentApi.sendText(text);
 
       setMessages((prev) => [
         ...prev,
@@ -177,7 +173,7 @@ export default function SupportWidget({ user }) {
           id: 'bot-' + Date.now(),
           sender: 'assistant',
           type: 'text',
-          content: `Received! We have registered your inquiry (Ref #${result.ticket_id || 'SUP-01'}). Our team is processing your request.`,
+          content: `${result.reply_text}${describeTurn(result)}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -221,13 +217,7 @@ export default function SupportWidget({ user }) {
     setIsSending(true);
 
     try {
-      const result = await supportApi.sendVoice(currentAudio.blob, {
-        customer_name: user?.full_name || 'Customer',
-        account_number: user?.account_number || '',
-        note: `Voice message (${formatTime(currentAudio.duration)})`,
-      });
-
-      const sizeKb = result.size_bytes ? (result.size_bytes / 1024).toFixed(1) + ' KB' : '';
+      const result = await agentApi.sendVoice(currentAudio.blob);
 
       setMessages((prev) => [
         ...prev,
@@ -235,7 +225,7 @@ export default function SupportWidget({ user }) {
           id: 'bot-voice-' + Date.now(),
           sender: 'assistant',
           type: 'text',
-          content: `Received! We recorded your voice note (Ref #${result.ticket_id || 'SUP-V-01'}${sizeKb ? ` • ${sizeKb}` : ''}) and are processing your request.`,
+          content: `${result.transcript ? `Heard: "${result.transcript}"\n\n` : ''}${result.reply_text}${describeTurn(result)}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);

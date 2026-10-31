@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import config, stt
+from . import config, nlu, stt
 from .orchestrator import Orchestrator
 from .schemas import Escalation, TurnResponse
 from .state import SESSIONS, State, new_session
@@ -23,6 +23,9 @@ orch = Orchestrator()
 @app.on_event("startup")
 def _load_stt():
     stt.warm_up()
+    nlu.warm_up_llm()  # loads the local model in the background
+    if hasattr(orch.backend, "warm"):
+        orch.backend.warm()  # open the database connection before the first caller
 
 
 def _err(status, code, message, retryable=False):
@@ -43,9 +46,20 @@ def health():
 
 
 @app.post("/api/v1/sessions")
-def start_session():
+async def start_session(request: Request):
+    """Optional JSON {"customer_id": "C1023", "pre_verified": true} when the server already verified the customer
+    (server-to-server only; the browser never calls this service directly)."""
     s = new_session()
-    return {"session_id": s.id, "state": s.state, "reply_text": orch.greet(s), "reply_audio_url": None}
+    body = {}
+    if request.headers.get("content-type", "").startswith("application/json"):
+        body = await request.json() or {}
+    if body.get("pre_verified") and body.get("customer_id"):
+        cust = orch.backend.customer(body["customer_id"])
+        if cust:
+            s.customer_id, s.customer_name, s.verified, s.state = body["customer_id"], cust.get("name"), True, State.ACT
+            s.audit("AUTH", {"customer_id": s.customer_id, "ok": True, "via": "server"})
+    return {"session_id": s.id, "state": s.state, "verified": s.verified,
+            "reply_text": orch.greet(s), "reply_audio_url": None}
 
 
 @app.post("/api/v1/sessions/{sid}/turn", response_model=TurnResponse)
