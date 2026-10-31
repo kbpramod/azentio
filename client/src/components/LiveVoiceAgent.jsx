@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { supportApi } from '../services/api';
+import { agentApi, describeTurn } from '../services/api';
 
 export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
   // Agent states: 'connecting' | 'listening' | 'user_speaking' | 'processing' | 'assistant_speaking' | 'muted' | 'error'
@@ -94,20 +94,19 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
     const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     try {
-      const result = await supportApi.sendVoice(blob, {
-        customer_name: user?.full_name || 'Customer',
-        account_number: user?.account_number || '',
-        note: 'Live voice interview exchange',
-      });
-
-      const responseText = "We recorded your message. We are processing your request.";
+      // server -> AI service: speech-to-text, understanding, banking lookup, grounded reply
+      const result = await agentApi.sendVoice(blob);
+      const responseText = result.reply_text;
 
       setTranscripts((prev) => [
         ...prev,
+        ...(result.transcript
+          ? [{ id: 'user-' + Date.now(), sender: 'user', text: result.transcript, time: nowTime }]
+          : []),
         {
           id: 'bot-' + Date.now(),
           sender: 'assistant',
-          text: `${responseText} (Ref #${result.ticket_id || 'SUP-VOICE'})`,
+          text: `${responseText}${describeTurn(result)}`,
           time: nowTime,
         },
       ]);
@@ -120,14 +119,14 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
       });
     } catch (err) {
       console.error('Failed to send voice to backend:', err);
-      const errReply = "We recorded your audio, but encountered a network delay. Resuming listening.";
+      const errReply = "Sorry, I couldn't process that just now. Please try again, or switch to chat.";
       speakText(errReply, () => {
         setAgentState('listening');
         setStatusMessage('Listening to you...');
         isSpeakingRef.current = false;
       });
     }
-  }, [user, speakText]);
+  }, [speakText]);
 
   // Stop recording user speech and finalize utterance
   const finalizeUtterance = useCallback(() => {

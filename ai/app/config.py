@@ -14,6 +14,8 @@ LLM_EFFORT = os.getenv("LLM_EFFORT", "low")
 BANK_BACKEND = os.getenv("BANK_BACKEND", "mock")
 DATABASE_URL = os.getenv("DATABASE_URL", "")
 BANKING_API_URL = os.getenv("BANKING_API_URL", "").rstrip("/")
+# The team server records calls/turns/audit; only turn this on when running the AI service on its own
+RECORD_CALLS = os.getenv("RECORD_CALLS", "false").lower() == "true"
 
 # base.en + beam 1: measured 18/18 noisy clips understood at ~1.8 s on 8 CPUs (small: ~5.3 s)
 STT_MODEL = os.getenv("STT_MODEL", "base.en")

@@ -90,6 +90,7 @@ class TurnResponse(BaseModel):
     intents: list[Intent] = []
     state: str
     verified: bool
+    customer_id: Optional[str] = None  # set once verified
     reply_text: str
     reply_audio_url: Optional[str] = None
     sources: list[Source] = []

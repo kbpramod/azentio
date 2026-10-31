@@ -100,7 +100,7 @@ class Orchestrator:
             s.audit("GUARD", {"ok": True})
 
         s.add_turn("agent", reply)
-        if hasattr(self.backend, "record_turn"):  # persist call history for the ops dashboard
+        if config.RECORD_CALLS and hasattr(self.backend, "record_turn"):  # standalone mode only
             try:
                 self.backend.record_turn(s, text, reply, [i.name.value for i in nlu.intents], stt_conf, latency)
             except Exception as exc:
@@ -425,6 +425,6 @@ class Orchestrator:
         latency["tts"] = _ms(t0)
         return TurnResponse(
             session_id=s.id, transcript=transcript, stt_confidence=conf, intents=intents, state=s.state,
-            verified=s.verified, reply_text=reply, reply_audio_url=audio_url, sources=sources,
+            verified=s.verified, customer_id=s.customer_id if s.verified else None, reply_text=reply, reply_audio_url=audio_url, sources=sources,
             tickets=tickets, escalation=s.escalation if s.state == State.ESCALATED else None, latency_ms=latency,
         )

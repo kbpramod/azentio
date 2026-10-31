@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.integrations.ai_pipeline import process_ai_turn
@@ -108,6 +108,31 @@ async def api_process_turn(
         call=call,
         text=payload.text,
         input_type=payload.input_type,
+    )
+    return TurnResponse(**result)
+
+
+@router.post(
+    "/{session_id}/turn/audio",
+    response_model=TurnResponse,
+    summary="Process a spoken turn (audio file: webm/ogg/mp3/wav) with the AI pipeline",
+)
+async def api_process_audio_turn(
+    session_id: str,
+    audio: UploadFile = File(..., description="Recorded customer speech"),
+    db: AsyncSession = Depends(get_db),
+) -> TurnResponse:
+    session = await get_session(db, session_id)
+    call = await get_session_call(db, session_id)
+    if not call:
+        from app.core.exceptions import ResourceNotFoundException
+        raise ResourceNotFoundException(f"No active call associated with session '{session_id}'.")
+
+    result = await process_ai_turn(
+        db=db,
+        session=session,
+        call=call,
+        audio=(audio.filename or "turn.webm", await audio.read(), audio.content_type or "application/octet-stream"),
     )
     return TurnResponse(**result)
 

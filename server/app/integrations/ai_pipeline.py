@@ -29,14 +29,14 @@ from app.models.vaani_models import (
 from app.services.audit_service import record_audit_event
 
 
-async def process_ai_turn(
+async def _rule_based_turn(
     db: AsyncSession,
     session: Session,
     call: Call,
     text: str,
     input_type: str = "voice_transcript",
 ) -> Dict[str, Any]:
-    """Callable entry point invoked by POST /api/v1/sessions/{session_id}/turn."""
+    """Keyword fallback used when the AI service (Member 2) is not reachable."""
     clean_text = text.strip()
     lowered = clean_text.lower()
 
@@ -187,32 +187,139 @@ async def process_ai_turn(
         "escalation": escalation,
     }
 
-"""Bridge to Member 2's AI orchestration service (azentio/ai, default http://127.0.0.1:8001).
 
-The AI service runs separately because both projects use a package named `app`.
-The frontend only talks to this server; these helpers forward the calls.
-"""
-from typing import Any, Optional
+# ---------------------------------------------------------------------------
+# Member 2 AI orchestration service (azentio/ai, default http://127.0.0.1:8001).
+# It runs as a separate process because both projects use a package named `app`.
+# ---------------------------------------------------------------------------
+import httpx  # noqa: E402
+from fastapi import HTTPException  # noqa: E402
 
-import httpx
-from fastapi import HTTPException
+from app.core.config import settings  # noqa: E402
 
-from app.core.config import settings
-
-TIMEOUT = httpx.Timeout(60.0, connect=5.0)  # speech-to-text on CPU can take a few seconds
+AI_TIMEOUT = httpx.Timeout(60.0, connect=3.0)  # speech-to-text on CPU takes a few seconds
+_AI_SESSIONS: Dict[str, str] = {}  # server session_id -> AI session_id (in memory)
 
 
-async def forward(method: str, path: str, *, json: Optional[dict] = None,
-                  files: Optional[dict] = None, data: Optional[dict] = None) -> Any:
+class AIUnavailable(Exception):
+    pass
+
+
+async def _ai_request(method: str, path: str, **kwargs):
     url = f"{settings.AI_SERVICE_URL.rstrip('/')}/api/v1{path}"
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-            res = await client.request(method, url, json=json, files=files, data=data)
-    except httpx.HTTPError:
-        raise HTTPException(503, detail={"error": {
-            "code": "AI_UNAVAILABLE", "message": "AI service is not reachable. Start it on port 8001.",
-            "retryable": True}})
+        async with httpx.AsyncClient(timeout=AI_TIMEOUT) as client:
+            res = await client.request(method, url, **kwargs)
+    except httpx.HTTPError as exc:
+        raise AIUnavailable(str(exc)) from exc
     body = res.json() if res.headers.get("content-type", "").startswith("application/json") else {}
-    if res.status_code >= 400:
-        raise HTTPException(res.status_code, detail=body.get("detail", body))
-    return body
+    return res.status_code, body
+
+
+async def _ai_session_id(session: Session, fresh: bool = False) -> str:
+    if not fresh and session.session_id in _AI_SESSIONS:
+        return _AI_SESSIONS[session.session_id]
+    # if the server already verified the customer (e.g. /verify form), the AI won't ask again
+    body = {"customer_id": session.customer_id, "pre_verified": True} if session.verified else {}
+    code, data = await _ai_request("POST", "/sessions", json=body)
+    if code >= 400:
+        raise AIUnavailable(f"AI session create failed: {code}")
+    _AI_SESSIONS[session.session_id] = data["session_id"]
+    return data["session_id"]
+
+
+async def _ai_turn(session: Session, text: str, audio: Optional[tuple]) -> Dict[str, Any]:
+    for fresh in (False, True):  # retry once with a new AI session if the AI service restarted
+        ai_sid = await _ai_session_id(session, fresh=fresh)
+        if audio is not None:
+            code, data = await _ai_request("POST", f"/sessions/{ai_sid}/turn", files={"audio": audio})
+        else:
+            code, data = await _ai_request("POST", f"/sessions/{ai_sid}/turn", json={"text": text})
+        if code == 404 and not fresh:
+            continue
+        if code == 422 and audio is not None:
+            raise HTTPException(422, detail=data.get("detail", data))  # unreadable audio
+        if code >= 400:
+            raise AIUnavailable(f"AI turn failed: {code}")
+        return data
+    raise AIUnavailable("AI session lost")
+
+
+async def process_ai_turn(
+    db: AsyncSession,
+    session: Session,
+    call: Call,
+    text: str = "",
+    input_type: str = "voice_transcript",
+    audio: Optional[tuple] = None,
+) -> Dict[str, Any]:
+    """Entry point for POST /sessions/{id}/turn and /turn/audio.
+
+    Sends the turn to Member 2's AI service; falls back to the keyword engine for text if it is down.
+    `audio` is (filename, bytes, content_type).
+    """
+    try:
+        ai = await _ai_turn(session, text, audio)
+    except AIUnavailable:
+        if audio is not None:
+            raise HTTPException(503, detail={"error": {
+                "code": "AI_UNAVAILABLE", "retryable": True,
+                "message": "Voice needs the AI service on port 8001. Type your question instead."}})
+        return await _rule_based_turn(db, session, call, text, input_type)
+
+    # keep the server session in step with verification done inside the conversation
+    if ai.get("verified") and not session.verified and ai.get("customer_id"):
+        session.verified = True
+        session.customer_id = ai["customer_id"]
+        session.current_state = "VERIFIED"
+        call.customer_id = ai["customer_id"]
+        await record_audit_event(db=db, event_type="VERIFICATION", event_status="SUCCESS",
+                                 session_id=session.session_id, call_id=call.call_id,
+                                 metadata={"via": "voice_agent", "customer_id": ai["customer_id"]})
+    escalation = ai.get("escalation")
+    if escalation and session.current_state != "ESCALATED":
+        session.current_state = "ESCALATED"
+        await record_audit_event(db=db, event_type="ESCALATION", event_status="SUCCESS",
+                                 session_id=session.session_id, call_id=call.call_id,
+                                 metadata={"reason": escalation.get("reason"), "priority": escalation.get("priority")})
+
+    count_res = await db.execute(
+        select(func.count(ConversationTurn.turn_id)).where(ConversationTurn.call_id == call.call_id)
+    )
+    turn_count = (count_res.scalar() or 0) + 1
+    turn_id = f"TURN-{uuid.uuid4().hex[:6].upper()}"
+    intents = [i["name"] for i in ai.get("intents", [])]
+    transcript = ai.get("transcript") or text
+
+    db.add(ConversationTurn(
+        turn_id=turn_id, call_id=call.call_id, session_id=session.session_id, turn_number=turn_count,
+        input_type="voice_audio" if audio is not None else input_type, transcript=transcript,
+        detected_intents=intents, reply_text=ai["reply_text"], processing_status="COMPLETED",
+    ))
+    await record_audit_event(db=db, event_type="TURN_PROCESSED", event_status="SUCCESS",
+                             session_id=session.session_id, call_id=call.call_id,
+                             metadata={"turn_id": turn_id, "turn_number": turn_count, "intents": intents,
+                                       "engine": "ai_service", "latency_ms": ai.get("latency_ms")})
+    await db.commit()
+
+    return {
+        "turn_id": turn_id,
+        "session_id": session.session_id,
+        "call_id": call.call_id,
+        "turn_number": turn_count,
+        "reply_text": ai["reply_text"],
+        "detected_intents": intents,
+        "state": session.current_state,
+        "verified": session.verified,
+        "tickets": [t["ticket_id"] for t in ai.get("tickets", [])],
+        "escalation": escalation.get("reason") if escalation else None,
+        # extra detail for the UI
+        "transcript": transcript,
+        "stt_confidence": ai.get("stt_confidence"),
+        "reply_audio_url": ai.get("reply_audio_url"),
+        "sources": ai.get("sources", []),
+        "ticket_details": ai.get("tickets", []),
+        "escalation_detail": escalation,
+        "agent_state": ai.get("state"),
+        "engine": "ai_service",
+    }

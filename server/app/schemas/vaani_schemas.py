@@ -53,6 +53,15 @@ class TurnResponse(BaseModel):
     verified: bool
     tickets: List[str] = []
     escalation: Optional[str] = None
+    # extra detail from the AI service (Member 2); absent when the keyword fallback answers
+    transcript: Optional[str] = None
+    stt_confidence: Optional[float] = None
+    reply_audio_url: Optional[str] = None
+    sources: List[dict] = []
+    ticket_details: List[dict] = []
+    escalation_detail: Optional[dict] = None
+    agent_state: Optional[str] = None
+    engine: str = "rules"
 
 
 class EscalateRequest(BaseModel):
@@ -172,7 +181,7 @@ class TicketCreateRequest(BaseModel):
 class TicketOut(BaseModel):
     ticket_id: str
     status: str
-    customer_id: str
+    customer_id: Optional[str] = None  # complaints/fallbacks can be raised before verification
     type: str = Field("service_request", validation_alias=AliasChoices("type", "ticket_type"))
     category: str
     summary: str
