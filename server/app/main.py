@@ -10,11 +10,73 @@ from app.db.session import get_engine
 
 
 async def init_database() -> None:
-    """Create database tables and seed repeatable synthetic banking data."""
-    try:
-        await seed_synthetic_data()
-    except Exception as e:
-        print(f"Database initialization warning: {e}")
+    """Create database tables and seed initial demo data in PostgreSQL Neon."""
+    if not settings.DATABASE_URL:
+        print("\n" + "=" * 70)
+        print(" [DATABASE CONFIGURATION REQUIRED]")
+        print(" Neon PostgreSQL DATABASE_URL is not set in server/.env.")
+        print(" Please paste your Neon connection string into server/.env:")
+        print(' DATABASE_URL="postgresql://username:password@ep-xyz.neon.tech/neondb?sslmode=require"')
+        print("=" * 70 + "\n")
+        return
+
+    print("Connecting to PostgreSQL Neon cluster...")
+    engine = get_engine()
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        # Safely ensure hashed_refresh_token column exists in Neon users table
+        try:
+            from sqlalchemy import text
+            await conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_refresh_token VARCHAR(255);"))
+        except Exception:
+            pass
+    print("PostgreSQL Neon tables verified and migrations ready.")
+
+    # Check and seed default demo customer in Neon
+    session_maker = get_session_maker()
+    async with session_maker() as session:
+        result = await session.execute(
+            select(User).where(User.email == "customer@azentio.com")
+        )
+        existing = result.scalar_one_or_none()
+        if not existing:
+            demo_user = User(
+                email="customer@azentio.com",
+                full_name="Alex Mercer",
+                hashed_password=hash_password("password123"),
+                role="customer",
+                account_number="AZ-882194",
+                balance=3450.75,
+                ai_credits=500,
+                is_active=True,
+            )
+            session.add(demo_user)
+            await session.flush()
+
+            tx1 = Transaction(
+                user_id=demo_user.id,
+                type="deposit",
+                amount=3000.00,
+                description="Salary Direct Deposit - Azentio Corp",
+                status="completed",
+            )
+            tx2 = Transaction(
+                user_id=demo_user.id,
+                type="transfer_out",
+                amount=45.25,
+                description="Coffee & Bakery Mart",
+                status="completed",
+            )
+            tx3 = Transaction(
+                user_id=demo_user.id,
+                type="deposit",
+                amount=500.00,
+                description="Mobile Check Deposit",
+                status="completed",
+            )
+            session.add_all([tx1, tx2, tx3])
+            await session.commit()
+            print("Successfully seeded demo customer into PostgreSQL Neon: customer@azentio.com")
 
 
 @asynccontextmanager

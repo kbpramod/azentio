@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { bankingApi } from '../services/api';
 
-export default function TransferModal({ isOpen, onClose, onTransferCompleted }) {
-  const [activeTab, setActiveTab] = useState('transfer'); // 'transfer' | 'deposit'
+export default function TransferModal({ isOpen, onClose, onTransferCompleted, defaultTab = 'transfer' }) {
+  const [activeTab, setActiveTab] = useState(defaultTab);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
@@ -20,14 +20,14 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
 
     try {
       if (activeTab === 'transfer') {
-        if (!recipient.trim()) throw new Error('Recipient account number is required.');
+        if (!recipient.trim()) throw new Error('Recipient account number or UPI ID is required.');
         if (Number(amount) <= 0) throw new Error('Amount must be greater than zero.');
         await bankingApi.transfer(recipient, amount, note || 'Wire Transfer');
-        setSuccess(`Successfully transferred $${Number(amount).toFixed(2)} to ${recipient}`);
+        setSuccess(`Successfully transferred ₹${Number(amount).toLocaleString()} to ${recipient}`);
       } else {
         if (Number(amount) <= 0) throw new Error('Deposit amount must be greater than zero.');
-        await bankingApi.deposit(amount, note || 'Instant Mobile Deposit');
-        setSuccess(`Successfully deposited $${Number(amount).toFixed(2)} into your account`);
+        await bankingApi.deposit(amount, note || 'Direct Depository Credit');
+        setSuccess(`Successfully credited ₹${Number(amount).toLocaleString()} into your account.`);
       }
       setAmount('');
       setRecipient('');
@@ -36,15 +36,15 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
         onTransferCompleted();
       }
     } catch (err) {
-      setError(err.message || 'Operation failed. Please try again.');
+      setError(err.message || 'Transaction could not be executed.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="modal-overlay">
-      <div className="modal-content">
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-tabs">
             <button
@@ -55,7 +55,7 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
                 setSuccess('');
               }}
             >
-              Transfer Funds
+              Transfer Funds (RTGS/NEFT/IMPS)
             </button>
             <button
               className={`modal-tab ${activeTab === 'deposit' ? 'active' : ''}`}
@@ -65,12 +65,10 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
                 setSuccess('');
               }}
             >
-              Deposit Money
+              Deposit Funds
             </button>
           </div>
-          <button className="btn-modal-close" onClick={onClose}>
-            ✕
-          </button>
+          <button className="btn-modal-close" onClick={onClose}>✕</button>
         </div>
 
         {error && <div className="modal-error-banner">{error}</div>}
@@ -79,10 +77,10 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
         <form onSubmit={handleSubmit} className="modal-form">
           {activeTab === 'transfer' && (
             <div className="form-group">
-              <label>Recipient Account Number</label>
+              <label>Beneficiary Account Number / UPI ID</label>
               <input
                 type="text"
-                placeholder="e.g. AZ-100234"
+                placeholder="e.g. AZ-639654 or merchant@azentio"
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
                 required
@@ -91,9 +89,9 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
           )}
 
           <div className="form-group">
-            <label>Amount (USD)</label>
+            <label>Amount (₹ INR)</label>
             <div className="input-prefix-wrapper">
-              <span className="input-prefix">$</span>
+              <span className="input-prefix">₹</span>
               <input
                 type="number"
                 step="0.01"
@@ -107,10 +105,10 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
           </div>
 
           <div className="form-group">
-            <label>Reference Note</label>
+            <label>Payment Purpose / Narration</label>
             <input
               type="text"
-              placeholder={activeTab === 'transfer' ? 'Rent, Invoice, etc.' : 'Direct payroll, gift'}
+              placeholder={activeTab === 'transfer' ? 'Invoice, rental fee, family allowance' : 'Payroll, dividend credit'}
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
@@ -124,9 +122,9 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
               {loading ? (
                 <span className="loading-spinner"></span>
               ) : activeTab === 'transfer' ? (
-                'Confirm Transfer'
+                'Execute Transfer'
               ) : (
-                'Confirm Deposit'
+                'Credit Account'
               )}
             </button>
           </div>
@@ -135,4 +133,3 @@ export default function TransferModal({ isOpen, onClose, onTransferCompleted }) 
     </div>
   );
 }
-

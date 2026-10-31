@@ -29,11 +29,11 @@ class UserOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-    expires_in_minutes: int
+class AuthResponse(BaseModel):
+    message: str = "Authentication successful"
     user: UserOut
+    access_token: Optional[str] = None
+    token_type: str = "bearer"
 
 
 class LogoutResponse(BaseModel):
@@ -67,4 +67,3 @@ class AgentChatResponse(BaseModel):
     ai_credits_used: int
     remaining_credits: int
     timestamp: datetime
-

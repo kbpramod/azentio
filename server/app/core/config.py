@@ -30,15 +30,25 @@ class Settings(BaseSettings):
     # Authentication & JWT
     SECRET_KEY: str = "azentio-banking-jwt-secret-key-change-in-production-2026"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15        # Short-lived access token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7          # 7-day refresh token
 
-    # Better Auth Configuration
+    # Cookie Security Settings
+    COOKIE_ACCESS_NAME: str = "azentio_access_token"
+    COOKIE_REFRESH_NAME: str = "azentio_refresh_token"
+    COOKIE_SAMESITE: str = "lax"
+    COOKIE_SECURE: bool = False                 # True in production HTTPS
+
+    # Better Auth Configuration (if needed)
     BETTER_AUTH_SECRET: Optional[str] = None
     BETTER_AUTH_API_KEY: Optional[str] = None
 
     # AI Credits API
     AICREDITS_API_KEY: Optional[str] = None
     AICREDITS_BASE_URL: str = "https://api.aicredits.com/v1"
+
+    # VaaniDesk AI orchestration service (azentio/ai)
+    AI_SERVICE_URL: str = "http://127.0.0.1:8001"
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
@@ -65,7 +75,7 @@ class Settings(BaseSettings):
         elif url.startswith("postgresql://") and not url.startswith("postgresql+asyncpg://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-        # Remove sslmode parameter if present, as asyncpg handles SSL via connect_args
+        # Remove sslmode query parameter if present, handled via asyncpg connect_args
         if "?sslmode=" in url:
             parts = url.split("?sslmode=")
             url = parts[0]

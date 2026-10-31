@@ -1,22 +1,5 @@
 const API_BASE = '/api/v1';
 
-export const getStoredToken = () => {
-  return localStorage.getItem('azentio_token');
-};
-
-export const setStoredToken = (token) => {
-  if (token) {
-    localStorage.setItem('azentio_token', token);
-  } else {
-    localStorage.removeItem('azentio_token');
-  }
-};
-
-export const clearStoredAuth = () => {
-  localStorage.removeItem('azentio_token');
-  localStorage.removeItem('azentio_user');
-};
-
 export const getStoredUser = () => {
   const userJson = localStorage.getItem('azentio_user');
   try {
@@ -34,21 +17,71 @@ export const setStoredUser = (user) => {
   }
 };
 
-async function apiRequest(endpoint, options = {}) {
-  const token = getStoredToken();
+export const clearStoredAuth = () => {
+  localStorage.removeItem('azentio_user');
+  localStorage.removeItem('azentio_token');
+};
+
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve();
+    }
+  });
+  failedQueue = [];
+};
+
+export async function apiRequest(endpoint, options = {}, isRetry = false) {
   const headers = {
     'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
-
-  const response = await fetch(`${API_BASE}${endpoint}`, {
+  const config = {
     ...options,
     headers,
-  });
+    credentials: 'include', // Automatically send & receive HttpOnly cookies!
+  };
+
+  const response = await fetch(`${API_BASE}${endpoint}`, config);
+
+  if (response.status === 401 && !isRetry && endpoint !== '/auth/login' && endpoint !== '/auth/refresh') {
+    if (isRefreshing) {
+      return new Promise((resolve, reject) => {
+        failedQueue.push({ resolve, reject });
+      }).then(() => apiRequest(endpoint, options, true));
+    }
+
+    isRefreshing = true;
+
+    try {
+      const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+
+      if (refreshRes.ok) {
+        const refreshData = await refreshRes.json();
+        setStoredUser(refreshData.user);
+        processQueue(null);
+        isRefreshing = false;
+        return apiRequest(endpoint, options, true);
+      } else {
+        throw new Error('Refresh token expired');
+      }
+    } catch (err) {
+      processQueue(err);
+      isRefreshing = false;
+      clearStoredAuth();
+      throw new Error('Session expired. Please log in again.');
+    }
+  }
 
   const data = await response.json().catch(() => ({}));
 
@@ -66,7 +99,6 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     });
-    setStoredToken(data.access_token);
     setStoredUser(data.user);
     return data;
   },
@@ -81,7 +113,12 @@ export const authApi = {
         initial_deposit: Number(initialDeposit),
       }),
     });
-    setStoredToken(data.access_token);
+    setStoredUser(data.user);
+    return data;
+  },
+
+  refresh: async () => {
+    const data = await apiRequest('/auth/refresh', { method: 'POST' });
     setStoredUser(data.user);
     return data;
   },
@@ -106,6 +143,21 @@ export const authApi = {
 export const bankingApi = {
   getAccount: async () => {
     return apiRequest('/banking/account');
+  },
+
+  getAccounts: async () => {
+    return apiRequest('/banking/accounts');
+  },
+
+  getLoans: async () => {
+    return apiRequest('/banking/loans');
+  },
+
+  payEmi: async (loanId, amount) => {
+    return apiRequest('/banking/pay-emi', {
+      method: 'POST',
+      body: JSON.stringify({ loan_id: loanId, amount: Number(amount) }),
+    });
   },
 
   getTransactions: async () => {
@@ -134,12 +186,41 @@ export const bankingApi = {
   },
 };
 
-export const agentApi = {
-  chat: async (message) => {
-    return apiRequest('/agent/chat', {
+export const supportApi = {
+  sendVoice: async (audioBlob, metadata = {}) => {
+    const formData = new FormData();
+    formData.append('audio_file', audioBlob, 'support_voice.webm');
+    if (metadata.customer_name) formData.append('customer_name', metadata.customer_name);
+    if (metadata.account_number) formData.append('account_number', metadata.account_number);
+    if (metadata.note) formData.append('note', metadata.note);
+
+    const response = await fetch(`${API_BASE}/support/voice`, {
       method: 'POST',
-      body: JSON.stringify({ message }),
+      body: formData,
+      credentials: 'include',
     });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.detail || data.message || 'Failed to submit voice recording');
+    }
+    return data;
+  },
+
+  sendText: async ({ message, customerName, accountNumber, category }) => {
+    return apiRequest('/support/text', {
+      method: 'POST',
+      body: JSON.stringify({
+        message,
+        customer_name: customerName,
+        account_number: accountNumber,
+        category,
+      }),
+    });
+  },
+
+  getStatus: async () => {
+    return apiRequest('/support/status');
   },
 };
 

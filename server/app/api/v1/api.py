@@ -1,15 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import (
-    agent,
-    auth,
-    banking,
-    csm,
-    health,
-    items,
-    mock_banking,
-    ops,
-    sessions,
-)
+from app.api.v1.endpoints import agent, auth, banking, health, items, support, sessions, mock_banking, ops, csm
 
 api_router = APIRouter()
 
@@ -36,6 +26,12 @@ api_router.include_router(banking.router, prefix="/banking", tags=["Customer Por
 
 # Existing Customer Service AI Agent
 api_router.include_router(agent.router, prefix="/agent", tags=["Customer Portal Agent"])
+# 24/7 Priority Support (Voice Dispatch & Text Inquiries)
+api_router.include_router(support.router, prefix="/support", tags=["Customer Support"])
+
+
+# VaaniDesk voice sessions (forwarded to the AI service, Member 2)
+api_router.include_router(sessions.router, prefix="/sessions", tags=["VaaniDesk Voice Sessions"])
 
 # Legacy/Demo Items
 api_router.include_router(items.router, prefix="/items", tags=["Demo Items"])
