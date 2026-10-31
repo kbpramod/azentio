@@ -1,41 +1,64 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { supportApi } from '../services/api';
+import { sessionApi, agentApi } from '../services/api';
+import { getBankingReply, getWelcomeGreeting, isPersonalAccountQuery } from '../services/bankingKnowledge';
 
-export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
+export default function LiveVoiceAgent({ user, onSwitchToChat, onClose, onOpenAuth }) {
   // Agent states: 'connecting' | 'listening' | 'user_speaking' | 'processing' | 'assistant_speaking' | 'muted' | 'error'
   const [agentState, setAgentState] = useState('connecting');
-  const [liveVolume, setLiveVolume] = useState(0); // 0 to 100 for visualizer
+  const [liveVolume, setLiveVolume] = useState(0); // 0 to 100
   const [transcripts, setTranscripts] = useState([
     {
       id: 'init-1',
       sender: 'assistant',
-      text: "I am listening. Speak naturally, and I will respond once you finish.",
+      text: getWelcomeGreeting(user),
+      requiresLogin: !user,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
-  const [statusMessage, setStatusMessage] = useState('Connecting to live audio stream...');
-  const [isMuted, setIsMuted] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
 
-  // Audio & VAD references
+  // Keep greeting in sync when user logs in or out
+  useEffect(() => {
+    setTranscripts((prev) => {
+      if (prev.length <= 1 && (prev[0]?.id === 'init-1' || prev[0]?.id?.startsWith('init-'))) {
+        return [
+          {
+            id: 'init-1',
+            sender: 'assistant',
+            text: getWelcomeGreeting(user),
+            requiresLogin: !user,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          },
+        ];
+      }
+      return prev;
+    });
+  }, [user]);
+  const [statusMessage, setStatusMessage] = useState('Connecting to Azentio Voice Agent...');
+  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(true);
+  const [playingBubbleId, setPlayingBubbleId] = useState(null);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [manualInput, setManualInput] = useState('');
+
+  // Audio, VAD & Session references
   const streamRef = useRef(null);
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
   const animFrameRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const silenceTimerRef = useRef(null);
-  const isSpeakingRef = useRef(false);
-  const isAssistantSpeakingRef = useRef(false);
   const recognitionRef = useRef(null);
   const transcriptContainerRef = useRef(null);
+  const sessionIdRef = useRef(null);
+  const latestTranscriptRef = useRef('');
+  const interimTranscriptRef = useRef('');
+  const silenceTimerRef = useRef(null);
+  const activeUtteranceRef = useRef(null);
+  const isAssistantSpeakingRef = useRef(false);
+  const isProcessingRef = useRef(false);
+  const isClosingRef = useRef(false);
 
   // Configuration constants
-  const SPEECH_THRESHOLD = 18; // Audio RMS volume threshold to trigger speech
-  const SILENCE_DURATION_MS = 1400; // Silence time before concluding user has stopped talking
-  const MIN_SPEECH_DURATION_MS = 600; // Minimum duration to consider real speech
-
-  const speechStartTimeRef = useRef(0);
+  const SPEECH_THRESHOLD = 8;
+  const SILENCE_DURATION_MS = 400; // 400ms pause after finalized speech triggers assistant response
 
   // Auto-scroll transcript log
   useEffect(() => {
@@ -44,143 +67,260 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
     }
   }, [transcripts]);
 
-  // Text-To-Speech Output
-  const speakText = useCallback((text, onFinishCallback) => {
+  // Robust Text-To-Speech (Speech-to-Speech audio output)
+  const speakText = useCallback((text, onFinishCallback, bubbleId = null) => {
+    if (isClosingRef.current) return;
     if (!('speechSynthesis' in window)) {
       if (onFinishCallback) onFinishCallback();
       return;
     }
 
-    // Stop any existing speech
-    window.speechSynthesis.cancel();
+    try {
+      // Chrome unfreeze: resume paused audio pipeline
+      window.speechSynthesis.cancel();
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
 
-    // Pick a natural English voice if available
-    const voices = window.speechSynthesis.getVoices();
-    const naturalVoice = voices.find(
-      (v) =>
-        v.lang.startsWith('en') &&
-        (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Zira') || v.name.includes('Samantha'))
-    ) || voices.find((v) => v.lang.startsWith('en'));
+      // Select natural English voice
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length > 0) {
+        const naturalVoice = voices.find(
+          (v) =>
+            v.lang.startsWith('en') &&
+            (v.name.includes('Natural') ||
+              v.name.includes('Google') ||
+              v.name.includes('Online') ||
+              v.name.includes('David') ||
+              v.name.includes('Zira') ||
+              v.name.includes('Samantha') ||
+              v.name.includes('Mark'))
+        ) || voices.find((v) => v.lang.startsWith('en')) || voices[0];
 
-    if (naturalVoice) utterance.voice = naturalVoice;
+        if (naturalVoice) utterance.voice = naturalVoice;
+      }
 
-    isAssistantSpeakingRef.current = true;
-    setAgentState('assistant_speaking');
-    setStatusMessage('Azentio Assistant speaking...');
+      // Store in ref to prevent V8 garbage collection mid-speech
+      activeUtteranceRef.current = utterance;
+      isAssistantSpeakingRef.current = true;
+      setAgentState('assistant_speaking');
+      setStatusMessage('Azentio Assistant speaking (audio output active)...');
+      if (bubbleId) setPlayingBubbleId(bubbleId);
 
-    utterance.onend = () => {
+      utterance.onend = () => {
+        isAssistantSpeakingRef.current = false;
+        activeUtteranceRef.current = null;
+        setPlayingBubbleId(null);
+        if (onFinishCallback && !isClosingRef.current) onFinishCallback();
+      };
+
+      utterance.onerror = (e) => {
+        console.warn('Speech synthesis state:', e);
+        isAssistantSpeakingRef.current = false;
+        activeUtteranceRef.current = null;
+        setPlayingBubbleId(null);
+        if (onFinishCallback && !isClosingRef.current) onFinishCallback();
+      };
+
+      // Slight delay ensures audio context is primed in Chromium
+      setTimeout(() => {
+        if (!isClosingRef.current) {
+          window.speechSynthesis.speak(utterance);
+        }
+      }, 40);
+    } catch (e) {
+      console.warn('TTS execution error:', e);
       isAssistantSpeakingRef.current = false;
-      if (onFinishCallback) onFinishCallback();
-    };
-
-    utterance.onerror = (e) => {
-      console.warn('Speech synthesis error or interrupt:', e);
-      isAssistantSpeakingRef.current = false;
-      if (onFinishCallback) onFinishCallback();
-    };
-
-    window.speechSynthesis.speak(utterance);
+      activeUtteranceRef.current = null;
+      setPlayingBubbleId(null);
+      if (onFinishCallback && !isClosingRef.current) onFinishCallback();
+    }
   }, []);
 
-  // Send captured voice note to backend
-  const sendVoiceToBackend = useCallback(async (blob) => {
+  // Send recognized user speech to backend AI model (or smart offline banking fallback)
+  const processUserTurn = useCallback(async (spokenText) => {
+    if (isClosingRef.current || isProcessingRef.current) return;
+
+    const text = (spokenText || latestTranscriptRef.current || interimTranscriptRef.current || '').trim();
+    if (!text) {
+      setAgentState('listening');
+      setStatusMessage('Listening to you... (speak naturally)');
+      return;
+    }
+
+    isProcessingRef.current = true;
+    latestTranscriptRef.current = '';
+    interimTranscriptRef.current = '';
     setAgentState('processing');
-    setStatusMessage('Transmitting audio & processing...');
+    setStatusMessage('Azentio AI is thinking...');
 
     const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-    try {
-      const result = await supportApi.sendVoice(blob, {
-        customer_name: user?.full_name || 'Customer',
-        account_number: user?.account_number || '',
-        note: 'Live voice interview exchange',
-      });
+    // 1. Add user's spoken text to transcript
+    setTranscripts((prev) => [
+      ...prev,
+      {
+        id: 'user-' + Date.now(),
+        sender: 'user',
+        text: text,
+        time: nowTime,
+      },
+    ]);
 
-      const responseText = "We recorded your message. We are processing your request.";
+    let responseText = '';
+    let requiresLogin = false;
 
-      setTranscripts((prev) => [
-        ...prev,
-        {
-          id: 'bot-' + Date.now(),
-          sender: 'assistant',
-          text: `${responseText} (Ref #${result.ticket_id || 'SUP-VOICE'})`,
-          time: nowTime,
-        },
-      ]);
+    // Fast-path client security check: If guest and inquiring about personal account/balance/loans
+    if (!user && isPersonalAccountQuery(text)) {
+      const gRes = getBankingReply(text, null);
+      responseText = gRes.reply;
+      requiresLogin = gRes.requiresLogin;
+    } else {
+      // Query Backend AI Pipeline
+      try {
+        let sid = sessionIdRef.current;
+        if (!sid) {
+          const customerId = user?.customer_id || (user?.email === 'customer@azentio.com' ? 'C1023' : (user?.email || null));
+          const newSession = await sessionApi.createSession(customerId, 'web_voice');
+          sid = newSession.session_id;
+          sessionIdRef.current = sid;
+        }
 
-      // Speak response out loud, then return to listening
-      speakText(responseText, () => {
-        setAgentState('listening');
-        setStatusMessage('Listening to you... (speak naturally)');
-        isSpeakingRef.current = false;
-      });
-    } catch (err) {
-      console.error('Failed to send voice to backend:', err);
-      const errReply = "We recorded your audio, but encountered a network delay. Resuming listening.";
-      speakText(errReply, () => {
-        setAgentState('listening');
-        setStatusMessage('Listening to you...');
-        isSpeakingRef.current = false;
-      });
-    }
-  }, [user, speakText]);
-
-  // Stop recording user speech and finalize utterance
-  const finalizeUtterance = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
-    }
-  }, []);
-
-  // Start a fresh recording slice
-  const startUtteranceRecording = useCallback(() => {
-    if (!streamRef.current) return;
-    audioChunksRef.current = [];
-
-    try {
-      const options = { mimeType: 'audio/webm;codecs=opus' };
-      let recorder;
-      if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(options.mimeType)) {
-        recorder = new MediaRecorder(streamRef.current, options);
-      } else {
-        recorder = new MediaRecorder(streamRef.current);
+        const turnRes = await sessionApi.sendTurn(sid, text, 'voice_transcript');
+        responseText = turnRes.reply_text;
+      } catch (err) {
+        console.warn('Session turn failed, attempting agentApi:', err);
+        try {
+          const chatRes = await agentApi.chat(text);
+          responseText = chatRes.reply;
+        } catch (fallbackErr) {
+          console.warn('Backend unavailable, using banking knowledge engine:', fallbackErr);
+          const localRes = getBankingReply(text, user);
+          responseText = localRes.reply;
+          requiresLogin = localRes.requiresLogin;
+        }
       }
 
-      recorder.ondataavailable = (event) => {
-        if (event.data && event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        const mimeType = recorder.mimeType || 'audio/webm';
-        const blob = new Blob(audioChunksRef.current, { type: mimeType });
-        const speechDuration = Date.now() - speechStartTimeRef.current;
-
-        // If speech was long enough to be a genuine question, send it to backend
-        if (speechDuration >= MIN_SPEECH_DURATION_MS && blob.size > 1000) {
-          sendVoiceToBackend(blob);
-        } else {
-          // False trigger or too short, resume listening
-          setAgentState('listening');
-          setStatusMessage('Listening to you...');
-          isSpeakingRef.current = false;
-        }
-      };
-
-      mediaRecorderRef.current = recorder;
-      recorder.start(150);
-      speechStartTimeRef.current = Date.now();
-    } catch (err) {
-      console.error('Could not initialize MediaRecorder:', err);
+      if (!responseText) {
+        const localRes = getBankingReply(text, user);
+        responseText = localRes.reply;
+        requiresLogin = localRes.requiresLogin;
+      }
     }
-  }, [sendVoiceToBackend]);
 
-  // Main Audio & VAD loop
+    if (isClosingRef.current) return;
+
+    if (!user && (responseText.includes('please log in') || isPersonalAccountQuery(text))) {
+      requiresLogin = true;
+    }
+
+    const newBotBubbleId = 'bot-' + Date.now();
+
+    // 3. Add assistant's response to transcript
+    setTranscripts((prev) => [
+      ...prev,
+      {
+        id: newBotBubbleId,
+        sender: 'assistant',
+        text: responseText,
+        requiresLogin: requiresLogin,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+
+    // 4. Speak response through speaker if audio output is enabled
+    if (isSpeakerEnabled) {
+      speakText(responseText, () => {
+        isProcessingRef.current = false;
+        if (!isClosingRef.current) {
+          setAgentState('listening');
+          setStatusMessage('Listening to you... (speak naturally)');
+        }
+      }, newBotBubbleId);
+    } else {
+      isProcessingRef.current = false;
+      setAgentState('listening');
+      setStatusMessage('Listening to you... (speaker is muted)');
+    }
+  }, [user, isSpeakerEnabled, speakText]);
+
+  // Safe End Session Action (logs session details in tickets & routes unhandled to escalation_tickets)
+  const handleEndSession = useCallback(() => {
+    isClosingRef.current = true;
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch (_) {}
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    if (sessionIdRef.current) {
+      const hasEscalation = transcripts.some(
+        (t) => t.sender === 'user' && /human|agent|supervisor|representative|escalat|complaint|not help/i.test(t.text)
+      );
+      const closeReason = hasEscalation
+        ? 'Customer requested human supervisor or inquiry unhandled by AI'
+        : 'Customer ended interaction normally';
+      sessionApi.endSession(sessionIdRef.current, closeReason).catch(() => {});
+    }
+    onClose();
+  }, [onClose, transcripts]);
+
+  // Initialize Session & preload voices
+  useEffect(() => {
+    let active = true;
+
+    // Preload system speech voices
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.getVoices();
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = () => {
+          window.speechSynthesis.getVoices();
+        };
+      }
+    }
+
+    async function initSession() {
+      try {
+        const customerId = user?.customer_id || (user?.email === 'customer@azentio.com' ? 'C1023' : null);
+        const res = await sessionApi.createSession(customerId, 'web_voice');
+        if (active && res?.session_id) {
+          sessionIdRef.current = res.session_id;
+          const greetingText = res.greeting || (user ? `Hello ${user.full_name}, how can I help you today?` : "Hello! I am your Azentio Banking Voice Assistant. I can answer any general banking FAQs regarding branch hours, interest rates, loans, and account opening. Sign in to access your personal account details.");
+          setTranscripts([
+            {
+              id: 'init-1',
+              sender: 'assistant',
+              text: greetingText,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            },
+          ]);
+          if (isSpeakerEnabled) {
+            speakText(greetingText, null, 'init-1');
+          }
+        }
+      } catch (err) {
+        console.warn('Backend session init delay, offline voice assistant active:', err);
+      }
+    }
+
+    initSession();
+
+    return () => {
+      active = false;
+      if (sessionIdRef.current && !isClosingRef.current) {
+        sessionApi.endSession(sessionIdRef.current).catch(() => {});
+      }
+    };
+  }, [user, isSpeakerEnabled, speakText]);
+
+  // Main Audio & Speech Recognition Engine
   useEffect(() => {
     let active = true;
 
@@ -198,7 +338,7 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
           },
         });
 
-        if (!active) return;
+        if (!active || isClosingRef.current) return;
         streamRef.current = stream;
 
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -220,7 +360,7 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
         setAgentState('listening');
         setStatusMessage('Listening... speak whenever you are ready.');
 
-        // Initialize Web Speech Recognition for live captions if available
+        // Initialize Web Speech Recognition
         const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRec) {
           try {
@@ -230,24 +370,71 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
             recognition.lang = 'en-US';
 
             recognition.onresult = (event) => {
-              let currentTranscript = '';
+              if (isClosingRef.current || isProcessingRef.current) return;
+
+              let interimTranscript = '';
+              let finalTranscript = '';
+
               for (let i = event.resultIndex; i < event.results.length; i++) {
-                currentTranscript += event.results[i][0].transcript;
-              }
-              if (currentTranscript.trim()) {
-                // If assistant is speaking and user speaks, interrupt!
-                if (isAssistantSpeakingRef.current) {
-                  window.speechSynthesis.cancel();
-                  isAssistantSpeakingRef.current = false;
-                  setAgentState('user_speaking');
-                  setStatusMessage('Listening to your interruption...');
+                const textChunk = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                  finalTranscript += textChunk;
+                } else {
+                  interimTranscript += textChunk;
                 }
+              }
+
+              // Barge-in: interrupt assistant if user speaks
+              if ((finalTranscript || interimTranscript).trim() && isAssistantSpeakingRef.current) {
+                window.speechSynthesis.cancel();
+                isAssistantSpeakingRef.current = false;
+              }
+
+              // Case A: User completed a full thought/sentence (isFinal)
+              if (finalTranscript.trim()) {
+                const completedSentence = finalTranscript.trim();
+                latestTranscriptRef.current = completedSentence;
+                interimTranscriptRef.current = '';
+                setAgentState('user_speaking');
+                setStatusMessage(`You: "${completedSentence}"`);
+
+                if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+                // 400ms pause after sentence completion triggers response
+                silenceTimerRef.current = setTimeout(() => {
+                  if (latestTranscriptRef.current && !isClosingRef.current && !isProcessingRef.current) {
+                    const toSend = latestTranscriptRef.current;
+                    latestTranscriptRef.current = '';
+                    processUserTurn(toSend);
+                  }
+                }, SILENCE_DURATION_MS);
+              }
+              // Case B: User is speaking words mid-sentence (interim)
+              else if (interimTranscript.trim()) {
+                const currentDraft = interimTranscript.trim();
+                interimTranscriptRef.current = currentDraft;
+                setAgentState('user_speaking');
+                setStatusMessage(`You: "${currentDraft}..."`);
+
+                // Give 1000ms breathing room while user is still speaking mid-sentence
+                if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+                silenceTimerRef.current = setTimeout(() => {
+                  if (interimTranscriptRef.current && !isClosingRef.current && !isProcessingRef.current) {
+                    const toSend = interimTranscriptRef.current;
+                    interimTranscriptRef.current = '';
+                    processUserTurn(toSend);
+                  }
+                }, 1000);
               }
             };
 
-            recognition.onerror = () => {};
+            recognition.onerror = (e) => {
+              if (e.error !== 'no-speech') {
+                console.warn('Speech recognition status:', e.error);
+              }
+            };
+
             recognition.onend = () => {
-              if (active && !isMuted) {
+              if (active && !isMuted && !isClosingRef.current) {
                 try { recognition.start(); } catch (_) {}
               }
             };
@@ -255,71 +442,35 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
             recognition.start();
             recognitionRef.current = recognition;
           } catch (recErr) {
-            console.log('Live captions not active:', recErr);
+            console.warn('Browser speech recognition not active:', recErr);
           }
         }
 
-        // Real-time audio volume analysis & VAD processing
+        // Real-time audio volume visualizer & barge-in
         const bufferLength = analyser.frequencyBinCount;
         const dataArray = new Uint8Array(bufferLength);
 
         const analyzeAudio = () => {
-          if (!active) return;
+          if (!active || isClosingRef.current) return;
 
           analyser.getByteFrequencyData(dataArray);
-          let sum = 0;
-          for (let i = 0; i < bufferLength; i++) {
-            sum += dataArray[i];
-          }
-          const averageVolume = sum / bufferLength;
-          setLiveVolume(Math.min(100, Math.round((averageVolume / 128) * 100)));
 
-          // Check for Interruption (Barge-In) while assistant is speaking
+          // Vocal frequency volume range (bins 2 to 32)
+          let voiceSum = 0;
+          const binsToCheck = Math.min(32, bufferLength);
+          for (let i = 2; i < binsToCheck; i++) {
+            voiceSum += dataArray[i];
+          }
+          const vocalVolume = voiceSum / (binsToCheck - 2);
+          setLiveVolume(Math.min(100, Math.round((vocalVolume / 100) * 100)));
+
+          // Barge-in check while assistant is speaking
           if (isAssistantSpeakingRef.current) {
-            if (averageVolume > SPEECH_THRESHOLD + 6) {
-              // User interrupted the assistant!
-              console.log('User interruption detected! Halting assistant speech.');
+            if (vocalVolume > SPEECH_THRESHOLD + 4) {
               window.speechSynthesis.cancel();
               isAssistantSpeakingRef.current = false;
-              isSpeakingRef.current = true;
               setAgentState('user_speaking');
               setStatusMessage('Interrupted. Listening to you...');
-              startUtteranceRecording();
-            }
-            animFrameRef.current = requestAnimationFrame(analyzeAudio);
-            return;
-          }
-
-          // If muted, skip VAD trigger
-          if (isMuted) {
-            animFrameRef.current = requestAnimationFrame(analyzeAudio);
-            return;
-          }
-
-          // Normal VAD: Listening for User Speech
-          if (averageVolume > SPEECH_THRESHOLD) {
-            // Volume above threshold => User is speaking
-            if (silenceTimerRef.current) {
-              clearTimeout(silenceTimerRef.current);
-              silenceTimerRef.current = null;
-            }
-
-            if (!isSpeakingRef.current) {
-              isSpeakingRef.current = true;
-              setAgentState('user_speaking');
-              setStatusMessage('Listening... (detecting voice)');
-              startUtteranceRecording();
-            }
-          } else {
-            // Volume below threshold => Silence
-            if (isSpeakingRef.current && !silenceTimerRef.current) {
-              silenceTimerRef.current = setTimeout(() => {
-                // User has paused long enough; conclude utterance and transmit
-                console.log('Silence detected after speech. Finalizing utterance.');
-                isSpeakingRef.current = false;
-                silenceTimerRef.current = null;
-                finalizeUtterance();
-              }, SILENCE_DURATION_MS);
             }
           }
 
@@ -355,7 +506,7 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
         audioContextRef.current.close().catch(() => {});
       }
     };
-  }, [isMuted, startUtteranceRecording, finalizeUtterance]);
+  }, [isMuted, processUserTurn]);
 
   // Toggle Mute
   const toggleMute = () => {
@@ -372,6 +523,16 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
     }
   };
 
+  // Immediate send trigger
+  const handleImmediateSend = () => {
+    const textToSend = latestTranscriptRef.current || interimTranscriptRef.current || manualInput;
+    if (textToSend.trim()) {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      setManualInput('');
+      processUserTurn(textToSend.trim());
+    }
+  };
+
   return (
     <div className="live-voice-window animate-fade-in">
       {/* Top Header */}
@@ -382,11 +543,27 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
           </div>
           <div>
             <div className="voice-title">Azentio Live Voice Agent</div>
-            <div className="voice-sub">Continuous Duplex • Automatic VAD</div>
+            <div className="voice-sub">Speech-to-Speech • 400ms Response • Speaker Output</div>
           </div>
         </div>
 
         <div className="voice-header-actions">
+          {/* Speaker Mute/Unmute Toggle */}
+          <button
+            type="button"
+            className={`btn-voice-control ${!isSpeakerEnabled ? 'active-muted' : ''}`}
+            onClick={() => {
+              const nextState = !isSpeakerEnabled;
+              setIsSpeakerEnabled(nextState);
+              if (!nextState && window.speechSynthesis) {
+                window.speechSynthesis.cancel();
+              }
+            }}
+            title={isSpeakerEnabled ? 'Mute speaker voice' : 'Enable speaker voice'}
+          >
+            <span>{isSpeakerEnabled ? '🔊 Speaker: ON' : '🔇 Speaker: OFF'}</span>
+          </button>
+
           <button
             type="button"
             className="btn-switch-chat"
@@ -398,13 +575,44 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
           <button
             type="button"
             className="btn-close-voice"
-            onClick={onClose}
+            onClick={handleEndSession}
             title="End voice session"
           >
             ✕
           </button>
         </div>
       </div>
+
+      {/* Authentication Mode Status Bar */}
+      {user ? (
+        <div className="voice-auth-status-bar authenticated">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <span className="auth-status-dot green"></span>
+            <span className="auth-status-label">
+              Signed in: <strong>{user.full_name}</strong> ({user.email})
+            </span>
+          </div>
+          <span className="auth-account-badge">A/C: {user.account_number}</span>
+        </div>
+      ) : (
+        <div className="voice-auth-status-bar guest">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+            <span className="auth-status-dot amber"></span>
+            <span className="auth-status-label">
+              Guest Visitor Mode: <strong>General FAQs Only</strong>
+            </span>
+          </div>
+          {onOpenAuth && (
+            <button
+              type="button"
+              className="btn-quick-signin-pill"
+              onClick={() => onOpenAuth('login')}
+            >
+              🔑 Sign In
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Central Visualizer & Status Area */}
       <div className="voice-visualizer-stage">
@@ -419,11 +627,12 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
             <div className="orb-core">
               <span className="orb-icon">
                 {agentState === 'user_speaking' && '🎙️'}
-                {agentState === 'assistant_speaking' && '🗣️'}
+                {agentState === 'assistant_speaking' && '🔊'}
                 {agentState === 'processing' && '⏳'}
                 {agentState === 'listening' && '🟢'}
                 {agentState === 'muted' && '🔇'}
                 {agentState === 'error' && '⚠️'}
+                {agentState === 'connecting' && '🔄'}
               </span>
             </div>
             <div className="orb-halo halo-1"></div>
@@ -443,9 +652,9 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
           {[...Array(16)].map((_, i) => {
             const barHeight =
               agentState === 'user_speaking'
-                ? Math.max(6, Math.min(36, Math.round((liveVolume * (i % 4 + 1)) / 4)))
+                ? Math.max(6, Math.min(36, Math.round((liveVolume * ((i % 4) + 1)) / 4)))
                 : agentState === 'assistant_speaking'
-                ? Math.max(6, (i % 3 + 1) * 7)
+                ? Math.max(6, ((i % 3) + 1) * 7)
                 : 6;
             return (
               <span
@@ -461,7 +670,7 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
       {/* Live Transcript Stream */}
       <div className="voice-transcripts-box" ref={transcriptContainerRef}>
         <div className="transcript-hint">
-          <span>💡 Hands-free mode: speak anytime. If the assistant is talking, you can interrupt and speak freely.</span>
+          <span>💡 Hands-free mode: speak naturally. Tap <strong>🔊 Listen</strong> on any message to hear it aloud through your speakers.</span>
         </div>
 
         {transcripts.map((item) => (
@@ -472,7 +681,31 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
             <span className="log-sender-tag">
               {item.sender === 'user' ? 'You' : 'Azentio Voice'}
             </span>
-            <div className="log-bubble">{item.text}</div>
+            <div className="log-bubble">
+              <p>{item.text}</p>
+              {item.sender === 'assistant' && (
+                <div className="voice-bubble-actions-row">
+                  <button
+                    type="button"
+                    className={`btn-replay-speaker ${playingBubbleId === item.id ? 'speaker-playing' : ''}`}
+                    onClick={() => speakText(item.text, null, item.id)}
+                    title="Play this message through your speaker"
+                  >
+                    <span>{playingBubbleId === item.id ? '🔊 Speaking...' : '🔊 Listen'}</span>
+                  </button>
+
+                  {!user && (item.requiresLogin || item.text.includes('please log in')) && onOpenAuth && (
+                    <button
+                      type="button"
+                      className="btn-voice-login-prompt"
+                      onClick={() => onOpenAuth('login')}
+                    >
+                      🔑 Sign In to Your Account
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             <span className="log-time">{item.time}</span>
           </div>
         ))}
@@ -484,6 +717,30 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
         )}
       </div>
 
+      {/* Quick Input & Immediate Send Bar */}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleImmediateSend();
+        }}
+        className="voice-inline-input-bar"
+      >
+        <input
+          type="text"
+          placeholder="Speak or type a banking question..."
+          value={manualInput}
+          onChange={(e) => setManualInput(e.target.value)}
+          disabled={agentState === 'processing'}
+        />
+        <button
+          type="submit"
+          className="btn-voice-send"
+          disabled={(!manualInput.trim() && !latestTranscriptRef.current && !interimTranscriptRef.current) || agentState === 'processing'}
+        >
+          ⚡ Send Now
+        </button>
+      </form>
+
       {/* Controls Bar */}
       <div className="voice-controls-bar">
         <button
@@ -492,13 +749,25 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
           onClick={toggleMute}
           title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
         >
-          <span>{isMuted ? '🔇 Unmute' : '🎙️ Mute'}</span>
+          <span>{isMuted ? '🔇 Unmute Mic' : '🎙️ Mic Active'}</span>
+        </button>
+
+        {/* Dedicated Test Speaker Button */}
+        <button
+          type="button"
+          className="btn-voice-control btn-test-speaker"
+          onClick={() => {
+            speakText("Speaker test successful. Audio output is loud and clear. How can I assist you today?");
+          }}
+          title="Test your audio speaker output"
+        >
+          <span>🔊 Test Speaker</span>
         </button>
 
         <button
           type="button"
           className="btn-voice-control btn-end-call"
-          onClick={onClose}
+          onClick={handleEndSession}
         >
           <span>⏹️ End Voice Session</span>
         </button>
@@ -506,9 +775,8 @@ export default function LiveVoiceAgent({ user, onSwitchToChat, onClose }) {
 
       {/* Secure footer */}
       <div className="voice-footer-secure">
-        <span>🛡️ Real-time Duplex Voice Channel • Automatic VAD Silence Routing</span>
+        <span>🛡️ Real-time Speech-to-Speech Channel • Interactive Speaker Playback • Grounded Banking Assistance</span>
       </div>
     </div>
   );
 }
-

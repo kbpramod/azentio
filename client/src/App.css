@@ -3569,3 +3569,1087 @@ input:checked + .toggle-slider:before {
 
 
 
+
+.voice-inline-input-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+.voice-inline-input-bar input {
+  flex: 1;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  outline: none;
+}
+.voice-inline-input-bar input:focus {
+  border-color: #2563eb;
+}
+.btn-voice-send {
+  background: #2563eb;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.btn-voice-send:hover {
+  background: #1d4ed8;
+}
+.btn-voice-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Speaker & Audio Buttons */
+.btn-replay-speaker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #2563eb;
+  cursor: pointer;
+  margin-top: 0.4rem;
+  transition: all 0.15s ease;
+}
+.btn-replay-speaker:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+.btn-test-speaker {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+.btn-test-speaker:hover {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.speaker-playing {
+  background: #dcfce7 !important;
+  border-color: #86efac !important;
+  color: #15803d !important;
+}
+
+
+/* Voice & Chat Auth Mode Badges & Login Prompts */
+.voice-auth-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.45rem 1rem;
+  font-size: 0.78rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  z-index: 2;
+}
+
+.voice-auth-status-bar.authenticated {
+  background: #f0fdf4;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.voice-auth-status-bar.guest {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.auth-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.auth-status-dot.green {
+  background: #22c55e;
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.7);
+}
+
+.auth-status-dot.amber {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.7);
+}
+
+.auth-account-badge {
+  font-family: monospace;
+  font-weight: 700;
+  background: rgba(22, 101, 52, 0.12);
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.74rem;
+}
+
+.btn-quick-signin-pill {
+  background: #d97706;
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-quick-signin-pill:hover {
+  background: #b45309;
+  transform: translateY(-1px);
+}
+
+.voice-bubble-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+.btn-voice-login-prompt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  background: #0f172a;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+  transition: all 0.2s ease;
+}
+
+.btn-voice-login-prompt:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+
+/* ==========================================================================
+   AZENTIO BANK - NEO-BRUTALISM DESIGN SYSTEM OVERHAUL
+   • Thick Black Outlines (2px - 4px)
+   • Hard Unblurred Drop Shadows (3D Pop Effect)
+   • Geometric Layout (Sharp 90-degree corners, no rounded pills)
+   • High Contrast Grotesque Typography & Vibrant Color Palette
+   ========================================================================== */
+
+:root {
+  --bg-primary: #f5f3ef;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --border-color: #000000;
+  --text-main: #000000;
+  --text-muted: #1e293b;
+  --text-dim: #334155;
+  --nb-yellow: #ffe600;
+  --nb-cyan: #00f0ff;
+  --nb-lime: #a6ff00;
+  --nb-purple: #c4a1ff;
+  --nb-coral: #ff5c5c;
+  --nb-pink: #ff85c0;
+  --nb-orange: #ff914d;
+  --nb-white: #ffffff;
+  --nb-black: #000000;
+  --border-thick: 3px solid #000000;
+  --border-heavy: 4px solid #000000;
+  --border-medium: 2.5px solid #000000;
+  --border-thin: 2px solid #000000;
+  --shadow-hard-sm: 3px 3px 0px #000000;
+  --shadow-hard-md: 5px 5px 0px #000000;
+  --shadow-hard-lg: 8px 8px 0px #000000;
+  --shadow-hard-xl: 12px 12px 0px #000000;
+  --font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  background-color: var(--bg-primary) !important;
+  color: #000000 !important;
+  font-family: var(--font-family) !important;
+  background-image: radial-gradient(#000000 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Sharp 90-Degree Geometric Layout Constraint */
+*, *::before, *::after {
+  border-radius: 0px !important;
+}
+
+/* ==========================================================================
+   NEO-BRUTALIST NAVBAR
+   ========================================================================== */
+.navbar {
+  background-color: #ffffff !important;
+  border-bottom: 3.5px solid #000000 !important;
+  box-shadow: 0 4px 0px #000000 !important;
+  padding: 0.9rem 2.5rem !important;
+}
+
+.brand-logo {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+}
+
+.brand-name {
+  font-family: var(--font-family) !important;
+  font-weight: 900 !important;
+  letter-spacing: 1px !important;
+  color: #000000 !important;
+}
+
+.brand-sub {
+  background: #000000 !important;
+  color: var(--nb-yellow) !important;
+  font-weight: 800 !important;
+  padding: 1px 4px !important;
+}
+
+.cust-tab-btn {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  text-transform: uppercase !important;
+  font-size: 0.85rem !important;
+  padding: 0.55rem 1rem !important;
+  cursor: pointer !important;
+  transition: all 0.1s ease !important;
+}
+
+.cust-tab-btn:hover {
+  background: var(--nb-yellow) !important;
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+.cust-tab-btn.active {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  transform: translate(-1px, -1px) !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+}
+
+.btn-nav-signin {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  transition: all 0.1s ease !important;
+}
+
+.btn-nav-signin:hover {
+  background: var(--nb-cyan) !important;
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+.btn-nav-signup {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  transition: all 0.1s ease !important;
+}
+
+.btn-nav-signup:hover {
+  background: var(--nb-lime) !important;
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+.btn-nav-logout {
+  background: #ffffff !important;
+  color: var(--nb-coral) !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  transition: all 0.1s ease !important;
+}
+
+.btn-nav-logout:hover {
+  background: var(--nb-coral) !important;
+  color: #ffffff !important;
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+/* ==========================================================================
+   NEO-BRUTALIST DASHBOARD BANNER & META
+   ========================================================================== */
+.dashboard-container {
+  padding: 2rem 3.5rem 6rem !important;
+  gap: 2rem !important;
+}
+
+.dashboard-welcome-header {
+  background: #ffffff !important;
+  border: 3.5px solid #000000 !important;
+  box-shadow: 8px 8px 0px #000000 !important;
+  padding: 2.25rem !important;
+}
+
+.customer-badge-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.badge-brutalist {
+  display: inline-block;
+  padding: 0.3rem 0.75rem;
+  border: 2px solid #000000;
+  box-shadow: 2.5px 2.5px 0px #000000;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-yellow { background: var(--nb-yellow); color: #000000; }
+.badge-green { background: var(--nb-lime); color: #000000; }
+.badge-cyan { background: var(--nb-cyan); color: #000000; }
+.badge-purple { background: var(--nb-purple); color: #000000; }
+.badge-coral { background: var(--nb-coral); color: #ffffff; }
+
+.header-text-block h2 {
+  font-family: var(--font-family) !important;
+  font-size: 2.3rem !important;
+  font-weight: 900 !important;
+  color: #000000 !important;
+  letter-spacing: -0.03em !important;
+  margin-bottom: 1.25rem !important;
+}
+
+.customer-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.65rem 1rem;
+  border: 2.5px solid #000000;
+  background: #faf8f5;
+  box-shadow: 3.5px 3.5px 0px #000000;
+}
+
+.meta-label {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: #475569;
+  text-transform: uppercase;
+}
+
+.meta-value {
+  font-size: 1rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: #000000;
+}
+
+.meta-item.highlight-balance {
+  background: var(--nb-cyan);
+  border: 3px solid #000000;
+  box-shadow: 4px 4px 0px #000000;
+}
+
+.meta-item.highlight-balance .meta-label {
+  color: #000000;
+  font-weight: 900;
+}
+
+.meta-balance {
+  font-size: 1.55rem;
+  font-weight: 900;
+  font-family: var(--font-family);
+  color: #000000;
+}
+
+/* Neo-Brutalist Action Buttons */
+.btn-action-primary,
+.btn-action-secondary {
+  border: 3px solid #000000 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+  font-family: var(--font-family) !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  font-size: 0.95rem !important;
+  padding: 0.85rem 1.6rem !important;
+  cursor: pointer !important;
+  transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+}
+
+.btn-action-primary {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+}
+
+.btn-action-primary:hover {
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 7px 7px 0px #000000 !important;
+  background: #ffea2b !important;
+}
+
+.btn-action-primary:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+}
+
+.btn-action-secondary {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+.btn-action-secondary:hover {
+  background: var(--nb-cyan) !important;
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 7px 7px 0px #000000 !important;
+}
+
+.btn-action-secondary:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+}
+
+/* ==========================================================================
+   NEO-BRUTALIST DASHBOARD SUBTABS
+   ========================================================================== */
+.dashboard-subtabs-nav {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 0.85rem !important;
+  border-bottom: 3.5px solid #000000 !important;
+  padding-bottom: 1.25rem !important;
+}
+
+.subtab-btn {
+  background: #ffffff !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+  color: #000000 !important;
+  padding: 0.8rem 1.4rem !important;
+  font-size: 0.95rem !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  cursor: pointer !important;
+  transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+}
+
+.subtab-btn:hover {
+  background: var(--nb-lime) !important;
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 6px 6px 0px #000000 !important;
+}
+
+.subtab-btn:active {
+  transform: translate(2px, 2px) !important;
+  box-shadow: 1px 1px 0px #000000 !important;
+}
+
+.subtab-btn.active {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+  transform: translate(-1px, -1px) !important;
+}
+
+/* ==========================================================================
+   ACCOUNTS VIEW (NEO-BRUTALIST)
+   ========================================================================== */
+.total-portfolio-banner {
+  background: var(--nb-purple) !important;
+  border: 3.5px solid #000000 !important;
+  box-shadow: 8px 8px 0px #000000 !important;
+  color: #000000 !important;
+  padding: 2.25rem !important;
+}
+
+.total-portfolio-banner .banner-label {
+  font-size: 0.82rem !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  background: #000000 !important;
+  color: var(--nb-yellow) !important;
+  padding: 0.25rem 0.75rem !important;
+  display: inline-block !important;
+}
+
+.total-balance-h2 {
+  font-family: var(--font-family) !important;
+  font-size: 3rem !important;
+  font-weight: 900 !important;
+  color: #000000 !important;
+  letter-spacing: -0.03em !important;
+  margin: 0.75rem 0 !important;
+}
+
+.account-box {
+  background: #ffffff !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 6px 6px 0px #000000 !important;
+  padding: 1.75rem !important;
+  transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+}
+
+.account-box:hover {
+  transform: translate(-3px, -3px) !important;
+  box-shadow: 9px 9px 0px #000000 !important;
+}
+
+.account-box.primary-account {
+  background: #fffdf5 !important;
+  border: 3.5px solid #000000 !important;
+}
+
+.acc-type-tag {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  border: 2px solid #000000 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  padding: 0.25rem 0.6rem !important;
+}
+
+.acc-number-code {
+  font-family: var(--font-mono) !important;
+  font-weight: 800 !important;
+  color: #000000 !important;
+  border: 1.5px solid #000000 !important;
+  padding: 0.15rem 0.45rem !important;
+  background: #ffffff !important;
+}
+
+.acc-balance-num {
+  font-family: var(--font-family) !important;
+  font-size: 2rem !important;
+  font-weight: 900 !important;
+  color: #000000 !important;
+}
+
+/* Official Statement Table */
+.transactions-section {
+  background: #ffffff !important;
+  border: 3.5px solid #000000 !important;
+  box-shadow: 8px 8px 0px #000000 !important;
+  padding: 2rem !important;
+}
+
+.section-header h3 {
+  font-family: var(--font-family) !important;
+  font-size: 1.5rem !important;
+  font-weight: 900 !important;
+  color: #000000 !important;
+  text-transform: uppercase !important;
+  letter-spacing: -0.02em !important;
+}
+
+.btn-refresh {
+  background: #ffffff !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+}
+
+.btn-refresh:hover {
+  background: var(--nb-yellow) !important;
+  transform: translate(-1px, -1px) !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+.transactions-table {
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  width: 100% !important;
+  border: 2.5px solid #000000 !important;
+}
+
+.transactions-table th {
+  background: #000000 !important;
+  color: #ffffff !important;
+  font-family: var(--font-family) !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+  padding: 0.85rem 1rem !important;
+  font-size: 0.82rem !important;
+  border-right: 2px solid #333333 !important;
+}
+
+.transactions-table td {
+  padding: 0.85rem 1rem !important;
+  border-bottom: 2px solid #000000 !important;
+  border-right: 1.5px solid #000000 !important;
+  font-weight: 700 !important;
+  color: #000000 !important;
+}
+
+.transactions-table tr:nth-child(even) {
+  background: #faf8f5 !important;
+}
+
+.transactions-table tr:hover {
+  background: #fff8db !important;
+}
+
+/* ==========================================================================
+   CARDS VIEW (NEO-BRUTALIST 3D POP)
+   ========================================================================== */
+.platinum-bank-card {
+  background: var(--nb-purple) !important;
+  border: 4px solid #000000 !important;
+  box-shadow: 10px 10px 0px #000000 !important;
+  color: #000000 !important;
+  padding: 2rem !important;
+}
+
+.card-brand-chip .card-bank-title {
+  font-family: var(--font-family) !important;
+  font-weight: 900 !important;
+  color: #000000 !important;
+  letter-spacing: 2px !important;
+}
+
+.card-brand-chip .card-tier-title {
+  background: #000000 !important;
+  color: var(--nb-yellow) !important;
+  font-weight: 800 !important;
+  padding: 2px 6px !important;
+}
+
+.emv-chip {
+  background: var(--nb-yellow) !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+}
+
+.card-number-display {
+  font-family: var(--font-mono) !important;
+  font-weight: 900 !important;
+  font-size: 1.45rem !important;
+  color: #000000 !important;
+  letter-spacing: 2px !important;
+}
+
+.card-holder-name, .card-valid-date, .card-cvv-code {
+  font-family: var(--font-mono) !important;
+  font-weight: 800 !important;
+  color: #000000 !important;
+}
+
+.card-controls-panel, .card-feature-card {
+  background: #ffffff !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 6px 6px 0px #000000 !important;
+}
+
+.btn-card-toggle {
+  background: #ffffff !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  cursor: pointer !important;
+}
+
+.btn-card-freeze {
+  background: var(--nb-coral) !important;
+  color: #ffffff !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+}
+
+/* ==========================================================================
+   TICKETS & ESCALATIONS VIEW (NEO-BRUTALIST)
+   ========================================================================== */
+.tickets-summary-banner {
+  background: var(--nb-yellow) !important;
+  border: 3.5px solid #000000 !important;
+  box-shadow: 8px 8px 0px #000000 !important;
+  padding: 2.25rem !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 1.5rem !important;
+  margin-bottom: 1.75rem !important;
+}
+
+.tickets-subtab-strip {
+  display: flex !important;
+  gap: 0.75rem !important;
+  margin-bottom: 1.5rem !important;
+}
+
+.ticket-subtab-btn {
+  background: #ffffff !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+  padding: 0.75rem 1.4rem !important;
+  font-size: 0.92rem !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  cursor: pointer !important;
+  transition: all 0.1s ease !important;
+}
+
+.ticket-subtab-btn.active {
+  background: var(--nb-cyan) !important;
+  transform: translate(-1px, -1px) !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+.brutalist-code-tag {
+  background: #ffffff;
+  border: 2px solid #000000;
+  box-shadow: 2px 2px 0px #000000;
+  padding: 0.2rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.brutalist-code-tag.esc-tag {
+  background: var(--nb-coral);
+  color: #ffffff;
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border: 1.5px solid #000000;
+  box-shadow: 2px 2px 0px #000000;
+  font-weight: 800;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+}
+
+.status-pill.status-open {
+  background: var(--nb-cyan);
+  color: #000000;
+}
+
+.status-pill.status-closed {
+  background: var(--nb-lime);
+  color: #000000;
+}
+
+.status-pill.status-escalated {
+  background: var(--nb-coral);
+  color: #ffffff;
+}
+
+.priority-pill {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border: 1.5px solid #000000;
+  font-weight: 800;
+  font-size: 0.72rem;
+  background: #ffffff;
+}
+
+.priority-pill.priority-high {
+  background: var(--nb-yellow);
+}
+
+.reason-badge {
+  background: #fff3f3;
+  border: 1.5px solid #000000;
+  padding: 0.2rem 0.5rem;
+  font-weight: 700;
+  font-size: 0.82rem;
+  display: inline-block;
+}
+
+.turns-badge {
+  background: #f1f5f9;
+  border: 1.5px solid #000000;
+  padding: 0.15rem 0.45rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+}
+
+/* ==========================================================================
+   SUPPORT CHAT DESK & VOICE AGENT (NEO-BRUTALIST OVERHAUL)
+   ========================================================================== */
+.support-fab-btn {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  border: 3.5px solid #000000 !important;
+  box-shadow: 6px 6px 0px #000000 !important;
+  font-weight: 900 !important;
+  font-family: var(--font-family) !important;
+  text-transform: uppercase !important;
+  cursor: pointer !important;
+  transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+}
+
+.support-fab-btn:hover {
+  transform: translate(-2px, -2px) !important;
+  box-shadow: 8px 8px 0px #000000 !important;
+}
+
+.chatgpt-window {
+  background: #faf8f5 !important;
+  border: 4px solid #000000 !important;
+  box-shadow: 10px 10px 0px #000000 !important;
+}
+
+.chatgpt-header {
+  background: var(--nb-yellow) !important;
+  border-bottom: 3.5px solid #000000 !important;
+  color: #000000 !important;
+}
+
+.chatgpt-title {
+  font-family: var(--font-family) !important;
+  font-weight: 900 !important;
+  color: #000000 !important;
+  text-transform: uppercase !important;
+}
+
+.chat-bubble {
+  border: 2.5px solid #000000 !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+  font-family: var(--font-family) !important;
+}
+
+.bubble-user {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  font-weight: 700 !important;
+}
+
+.bubble-bot {
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
+}
+
+.chatgpt-input-bar {
+  background: #ffffff !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+}
+
+.chatgpt-text-input {
+  font-family: var(--font-family) !important;
+  font-weight: 700 !important;
+  color: #000000 !important;
+}
+
+.chat-mic-btn {
+  background: var(--nb-yellow) !important;
+  border: 2px solid #000000 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+  cursor: pointer !important;
+}
+
+.chat-send-btn {
+  background: var(--nb-cyan) !important;
+  border: 2px solid #000000 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+  cursor: pointer !important;
+}
+
+/* Live Voice Agent Stage */
+.voice-agent-container {
+  background: #faf8f5 !important;
+  border: 4px solid #000000 !important;
+  box-shadow: 10px 10px 0px #000000 !important;
+}
+
+.voice-agent-header {
+  background: var(--nb-purple) !important;
+  border-bottom: 3.5px solid #000000 !important;
+  color: #000000 !important;
+}
+
+.voice-title {
+  font-family: var(--font-family) !important;
+  font-weight: 900 !important;
+  color: #000000 !important;
+}
+
+.voice-visualizer-stage {
+  background: #ffffff !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}
+
+.voice-orb {
+  border: 3.5px solid #000000 !important;
+  box-shadow: 6px 6px 0px #000000 !important;
+}
+
+.voice-status-pill {
+  background: #ffffff !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  color: #000000 !important;
+}
+
+.voice-transcripts-box {
+  background: #fffdf8 !important;
+  border: 3px solid #000000 !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+}
+
+.log-bubble {
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3.5px 3.5px 0px #000000 !important;
+}
+
+.log-user .log-bubble {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  font-weight: 700 !important;
+}
+
+.log-bot .log-bubble {
+  background: #ffffff !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
+}
+
+.btn-replay-speaker {
+  background: var(--nb-cyan) !important;
+  color: #000000 !important;
+  border: 2px solid #000000 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+}
+
+.btn-voice-login-prompt {
+  background: #000000 !important;
+  color: var(--nb-yellow) !important;
+  border: 2px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+}
+
+.voice-inline-input-bar {
+  border: 3px solid #000000 !important;
+  box-shadow: 4px 4px 0px #000000 !important;
+  background: #ffffff !important;
+}
+
+.btn-voice-send {
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  border: 2px solid #000000 !important;
+  box-shadow: 2px 2px 0px #000000 !important;
+  font-weight: 800 !important;
+  cursor: pointer !important;
+}
+
+.btn-voice-control {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-weight: 800 !important;
+  font-family: var(--font-family) !important;
+  cursor: pointer !important;
+}
+
+.btn-test-speaker {
+  background: var(--nb-cyan) !important;
+  color: #000000 !important;
+}
+
+.btn-end-call {
+  background: var(--nb-coral) !important;
+  color: #ffffff !important;
+}
+
+/* ==========================================================================
+   MODALS & INPUTS (NEO-BRUTALIST OVERHAUL)
+   ========================================================================== */
+.modal-content, .transfer-modal, .auth-modal, .info-modal {
+  background: #ffffff !important;
+  border: 4px solid #000000 !important;
+  box-shadow: 12px 12px 0px #000000 !important;
+}
+
+.modal-header {
+  border-bottom: 3px solid #000000 !important;
+  background: var(--nb-yellow) !important;
+  color: #000000 !important;
+  padding: 1.25rem !important;
+}
+
+.modal-header h3 {
+  font-family: var(--font-family) !important;
+  font-weight: 900 !important;
+  text-transform: uppercase !important;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+select,
+textarea {
+  border: 2.5px solid #000000 !important;
+  box-shadow: 3px 3px 0px #000000 !important;
+  font-family: var(--font-family) !important;
+  font-weight: 700 !important;
+  color: #000000 !important;
+  background: #ffffff !important;
+  outline: none !important;
+}
+
+input:focus, select:focus, textarea:focus {
+  background: #fffde6 !important;
+  border-color: #000000 !important;
+  box-shadow: 5px 5px 0px #000000 !important;
+}

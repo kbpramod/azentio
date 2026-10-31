@@ -76,6 +76,12 @@ export default function Navbar({
               >
                 📈 EMI & Loans
               </button>
+              <button
+                className={`cust-tab-btn ${activeTab === 'tickets' ? 'active' : ''}`}
+                onClick={() => onTabChange('tickets')}
+              >
+                🎫 Tickets
+              </button>
             </nav>
 
             <div className="customer-right-cluster">

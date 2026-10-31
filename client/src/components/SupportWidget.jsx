@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { supportApi } from '../services/api';
+import { supportApi, agentApi } from '../services/api';
+import { getBankingReply, getWelcomeGreeting, isPersonalAccountQuery } from '../services/bankingKnowledge';
 import LiveVoiceAgent from './LiveVoiceAgent';
 
-export default function SupportWidget({ user }) {
+export default function SupportWidget({ user, onOpenAuth }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeMode, setActiveMode] = useState('chat'); // 'chat' | 'live_voice'
   const [inputText, setInputText] = useState('');
@@ -14,10 +15,31 @@ export default function SupportWidget({ user }) {
       id: 'welcome-1',
       sender: 'assistant',
       type: 'text',
-      content: `Hello ${user ? user.full_name : ''}! How can we assist you today? You can type your question directly, or tap "Live Voice Agent" for hands-free real-time conversation.`,
+      content: getWelcomeGreeting(user),
+      requiresLogin: !user,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
+
+  // Keep greeting in sync when user logs in or out
+  useEffect(() => {
+    setMessages((prev) => {
+      // Only replace if there's only the initial welcome message
+      if (prev.length <= 1 && (prev[0]?.id === 'welcome-1' || prev[0]?.id?.startsWith('welcome-'))) {
+        return [
+          {
+            id: 'welcome-1',
+            sender: 'assistant',
+            type: 'text',
+            content: getWelcomeGreeting(user),
+            requiresLogin: !user,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          },
+        ];
+      }
+      return prev;
+    });
+  }, [user]);
 
   // Quick Voice recording state (inside chat mode)
   const [isRecording, setIsRecording] = useState(false);
@@ -141,7 +163,7 @@ export default function SupportWidget({ user }) {
     setVoiceError('');
   };
 
-  // Send typed text message
+  // Send typed text message (routes through AI Banking Agent with security login gating)
   const handleSendText = async (e) => {
     if (e) e.preventDefault();
     const text = inputText.trim();
@@ -165,11 +187,35 @@ export default function SupportWidget({ user }) {
     setIsSending(true);
 
     try {
-      const result = await supportApi.sendText({
-        message: text,
-        customerName: user?.full_name || 'Customer',
-        accountNumber: user?.account_number || '',
-      });
+      let replyContent = '';
+      let requiresLogin = false;
+
+      // Security Check: If guest is asking about personal accounts, prompt login immediately
+      if (!user && isPersonalAccountQuery(text)) {
+        const local = getBankingReply(text, null);
+        replyContent = local.reply;
+        requiresLogin = local.requiresLogin;
+      } else {
+        try {
+          const res = await agentApi.chat(text);
+          replyContent = res.reply;
+        } catch (chatErr) {
+          console.warn('agentApi chat failed, using local banking engine:', chatErr);
+          const local = getBankingReply(text, user);
+          replyContent = local.reply;
+          requiresLogin = local.requiresLogin;
+        }
+      }
+
+      if (!replyContent) {
+        const local = getBankingReply(text, user);
+        replyContent = local.reply;
+        requiresLogin = local.requiresLogin;
+      }
+
+      if (!user && (replyContent.includes('please log in') || isPersonalAccountQuery(text))) {
+        requiresLogin = true;
+      }
 
       setMessages((prev) => [
         ...prev,
@@ -177,7 +223,8 @@ export default function SupportWidget({ user }) {
           id: 'bot-' + Date.now(),
           sender: 'assistant',
           type: 'text',
-          content: `Received! We have registered your inquiry (Ref #${result.ticket_id || 'SUP-01'}). Our team is processing your request.`,
+          content: replyContent,
+          requiresLogin,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -188,7 +235,7 @@ export default function SupportWidget({ user }) {
           id: 'bot-err-' + Date.now(),
           sender: 'assistant',
           type: 'error',
-          content: `Could not send message: ${err.message || 'Server error'}. Please try again.`,
+          content: `Could not process request: ${err.message || 'Server error'}. Please try again.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ]);
@@ -262,7 +309,8 @@ export default function SupportWidget({ user }) {
         id: 'welcome-reset-' + Date.now(),
         sender: 'assistant',
         type: 'text',
-        content: `Chat cleared. How else can we assist you today?`,
+        content: getWelcomeGreeting(user),
+        requiresLogin: !user,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ]);
@@ -316,6 +364,7 @@ export default function SupportWidget({ user }) {
             /* Live Continuous Duplex Voice Agent */
             <LiveVoiceAgent
               user={user}
+              onOpenAuth={onOpenAuth}
               onSwitchToChat={() => setActiveMode('chat')}
               onClose={() => setIsOpen(false)}
             />
@@ -331,7 +380,9 @@ export default function SupportWidget({ user }) {
                   </div>
                   <div className="chatgpt-header-text">
                     <div className="chatgpt-title">Azentio Support</div>
-                    <div className="chatgpt-status">24/7 Banking Desk • Online</div>
+                    <div className="chatgpt-status">
+                      {user ? `Signed in: ${user.email}` : 'Guest Visitor • General FAQs'}
+                    </div>
                   </div>
                 </div>
 
@@ -395,7 +446,18 @@ export default function SupportWidget({ user }) {
                           <audio controls src={msg.audioUrl} className="bubble-audio-player" />
                         </div>
                       ) : (
-                        <div className="chat-bubble-text">{msg.content}</div>
+                        <div className="chat-bubble-text">
+                        <div>{msg.content}</div>
+                        {!user && (msg.requiresLogin || msg.content?.includes("please log in")) && onOpenAuth && (
+                          <button
+                            type="button"
+                            className="btn-voice-login-prompt"
+                            onClick={() => onOpenAuth('login')}
+                          >
+                            🔑 Sign In to Your Account
+                          </button>
+                        )}
+                      </div>
                       )}
 
                       <div className="chat-bubble-time">{msg.timestamp}</div>

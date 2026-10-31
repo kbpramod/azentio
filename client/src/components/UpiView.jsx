@@ -29,7 +29,7 @@ export default function UpiView({ user, onTransferCompleted }) {
       return;
     }
     if (Number(amount) > user.balance) {
-      setMessage({ type: 'error', text: `Insufficient balance. Available: $${user.balance.toFixed(2)}` });
+      setMessage({ type: 'error', text: `Insufficient balance. Available: ₹${Number(user.balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}` });
       return;
     }
     setShowPinModal(true);
@@ -54,7 +54,7 @@ export default function UpiView({ user, onTransferCompleted }) {
 
       setMessage({
         type: 'success',
-        text: `₹/${Number(amount).toFixed(2)} successfully sent to ${payeeUpi} via Azentio UPI!`,
+        text: `₹${Number(amount).toFixed(2)} successfully sent to ${payeeUpi} via Azentio UPI!`,
       });
       setPayeeUpi('');
       setAmount('');
@@ -141,9 +141,9 @@ export default function UpiView({ user, onTransferCompleted }) {
             </div>
 
             <div className="form-group">
-              <label>Amount (USD)</label>
+              <label>Amount (INR)</label>
               <div className="input-prefix-wrapper">
-                <span className="input-prefix">$</span>
+                <span className="input-prefix">₹</span>
                 <input
                   type="number"
                   step="0.01"
@@ -210,7 +210,7 @@ export default function UpiView({ user, onTransferCompleted }) {
               <button className="btn-modal-close" onClick={() => setShowPinModal(false)}>✕</button>
             </div>
             <p className="pin-subtext">
-              Authorizing transfer of <strong>${Number(amount).toFixed(2)}</strong> to <strong>{payeeUpi}</strong>
+              Authorizing transfer of <strong>₹{Number(amount).toFixed(2)}</strong> to <strong>{payeeUpi}</strong>
             </p>
             <div className="pin-input-wrapper">
               <input

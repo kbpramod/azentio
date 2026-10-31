@@ -28,6 +28,7 @@ export default function App() {
       .getMe()
       .then((userData) => {
         setUser(userData);
+        setStoredUser(userData);
       })
       .catch(() => {
         clearStoredAuth();
@@ -136,7 +137,7 @@ export default function App() {
       />
 
       {/* Floating 24/7 Support Desk (Speak / Voice & Type) */}
-      <SupportWidget user={user} />
+      <SupportWidget user={user} onOpenAuth={handleOpenAuth} />
     </div>
   );
 }

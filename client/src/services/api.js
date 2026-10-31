@@ -1,5 +1,17 @@
 const API_BASE = '/api/v1';
 
+export const getStoredToken = () => {
+  return localStorage.getItem('azentio_token');
+};
+
+export const setStoredToken = (token) => {
+  if (token) {
+    localStorage.setItem('azentio_token', token);
+  } else {
+    localStorage.removeItem('azentio_token');
+  }
+};
+
 export const getStoredUser = () => {
   const userJson = localStorage.getItem('azentio_user');
   try {
@@ -37,8 +49,10 @@ const processQueue = (error) => {
 };
 
 export async function apiRequest(endpoint, options = {}, isRetry = false) {
+  const token = getStoredToken();
   const headers = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   };
 
@@ -100,6 +114,9 @@ export const authApi = {
       body: JSON.stringify({ email, password }),
     });
     setStoredUser(data.user);
+    if (data.access_token) {
+      setStoredToken(data.access_token);
+    }
     return data;
   },
 
@@ -114,12 +131,18 @@ export const authApi = {
       }),
     });
     setStoredUser(data.user);
+    if (data.access_token) {
+      setStoredToken(data.access_token);
+    }
     return data;
   },
 
   refresh: async () => {
     const data = await apiRequest('/auth/refresh', { method: 'POST' });
     setStoredUser(data.user);
+    if (data.access_token) {
+      setStoredToken(data.access_token);
+    }
     return data;
   },
 
@@ -224,3 +247,56 @@ export const supportApi = {
   },
 };
 
+export const sessionApi = {
+  createSession: async (customerId = null, channel = 'web_voice') => {
+    return apiRequest('/sessions', {
+      method: 'POST',
+      body: JSON.stringify({ customer_id: customerId, channel }),
+    });
+  },
+
+  sendTurn: async (sessionId, text, inputType = 'voice_transcript') => {
+    return apiRequest(`/sessions/${sessionId}/turn`, {
+      method: 'POST',
+      body: JSON.stringify({ text, input_type: inputType }),
+    });
+  },
+
+  verifyCustomer: async (sessionId, customerId, dob) => {
+    return apiRequest(`/sessions/${sessionId}/verify`, {
+      method: 'POST',
+      body: JSON.stringify({ customer_id: customerId, dob }),
+    });
+  },
+
+  escalateSession: async (sessionId, reason = 'Customer requested human agent') => {
+    return apiRequest(`/sessions/${sessionId}/escalate`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  endSession: async (sessionId, reason = 'Customer closed interaction') => {
+    return apiRequest(`/sessions/${sessionId}/end`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  getTickets: async () => {
+    return apiRequest('/sessions/tickets');
+  },
+
+  getEscalationTickets: async () => {
+    return apiRequest('/sessions/escalation-tickets');
+  },
+};
+
+export const agentApi = {
+  chat: async (message) => {
+    return apiRequest('/agent/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+};
