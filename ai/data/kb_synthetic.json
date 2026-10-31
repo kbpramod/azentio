@@ -1,0 +1,14 @@
+[
+  {"id": "KB-01", "question": "What documents are required for a personal loan?",
+   "keywords": ["documents", "required", "personal", "loan", "apply", "kyc"],
+   "answer": "For a personal loan you usually need identity proof, address proof, your last three salary slips and six months of bank statements. (Synthetic FAQ.)"},
+  {"id": "KB-02", "question": "Can I prepay or foreclose my loan?",
+   "keywords": ["prepay", "prepayment", "foreclose", "foreclosure", "preclosure", "close", "early"],
+   "answer": "Yes, you can prepay or foreclose your loan after the lock-in period mentioned in your loan agreement. Charges depend on your loan type. (Synthetic FAQ.)"},
+  {"id": "KB-03", "question": "How can I pay my EMI?",
+   "keywords": ["pay", "emi", "payment", "methods", "auto", "debit", "nach", "upi"],
+   "answer": "You can pay your EMI by auto-debit (NACH), UPI, net banking or at a branch. (Synthetic FAQ.)"},
+  {"id": "KB-04", "question": "What are the branch working hours?",
+   "keywords": ["branch", "timing", "timings", "working", "hours", "open"],
+   "answer": "Branches are open Monday to Saturday, 10 am to 4 pm, except the second and fourth Saturdays. (Synthetic FAQ.)"}
+]
