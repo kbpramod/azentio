@@ -1,45 +1,60 @@
-# FastAPI Backend Server
+# VaaniDesk (Azentio Banking System) — Backend Server
 
-A clean, modular, and production-ready Python FastAPI backend server.
+FastAPI backend server for **VaaniDesk**, an AI-powered voice and digital customer service banking assistant.
 
 ---
 
-## 📁 Project Architecture
+## 🏛️ System Architecture
 
 ```
-server/
+azentio/server/
 ├── app/
-│   ├── __init__.py
-│   ├── main.py              # Application factory, lifespan, CORS, route registration
-│   ├── core/
-│   │   ├── __init__.py
-│   │   └── config.py        # Environment settings (Pydantic Settings)
+│   ├── main.py                     # Canonical FastAPI factory, lifespan, CORS, routes
 │   ├── api/
-│   │   ├── __init__.py
 │   │   └── v1/
-│   │       ├── __init__.py
-│   │       ├── api.py       # API v1 router aggregator
+│   │       ├── api.py              # Central API router aggregator
 │   │       └── endpoints/
-│   │           ├── __init__.py
-│   │           ├── health.py# Health check endpoint
-│   │           └── items.py # CRUD RESTful endpoints
+│   │           ├── health.py       # Diagnostic health check
+│   │           ├── sessions.py     # Voice & chat session lifecycle, verification, turns, escalation
+│   │           ├── mock_banking.py # Mock LOS (origination), LMS (servicing), CBS (core banking)
+│   │           ├── csm.py          # Customer service tickets with atomic idempotency
+│   │           ├── ops.py          # Operations dashboard (calls, tickets, escalations)
+│   │           ├── auth.py         # Customer portal authentication (JWT + bcrypt)
+│   │           ├── banking.py      # Customer portal account & transfer operations
+│   │           └── agent.py        # Customer portal rule-based & AI credit agent
+│   ├── core/
+│   │   ├── config.py               # Pydantic Settings (SQLite / Neon PostgreSQL dual-mode)
+│   │   ├── exceptions.py           # Structured VaaniDesk error envelope handler
+│   │   └── security.py             # JWT token handling & password hashing
+│   ├── db/
+│   │   ├── session.py              # Async SQLAlchemy engine (aiosqlite & asyncpg)
+│   │   └── seed.py                 # Repeatable synthetic banking dataset seeder
+│   ├── models/
+│   │   ├── user.py                 # Customer portal web user model
+│   │   ├── transaction.py          # Customer portal transaction model
+│   │   └── vaani_models.py         # VaaniDesk core banking, session, call, turn, ticket models
 │   ├── schemas/
-│   │   ├── __init__.py
-│   │   ├── common.py        # Generic API models & health schemas
-│   │   └── item.py          # Pydantic request / response validation schemas
-│   └── services/
-│       ├── __init__.py
-│       └── item_service.py  # Business logic & repository layer
+│   │   ├── auth.py                 # Auth schemas
+│   │   ├── common.py               # Health & generic schemas
+│   │   └── vaani_schemas.py        # Session, LOS, LMS, CBS, CSM, and Ops schemas
+│   ├── services/
+│   │   ├── session_service.py      # Session state machine & call tracking
+│   │   ├── verification_service.py # DOB customer verification & 3-attempt lockout
+│   │   ├── banking_service.py      # LOS, LMS, CBS data layer with session auth
+│   │   ├── ticket_service.py       # CSM ticket persistence with atomic deduplication
+│   │   ├── ops_service.py          # Operations reporting & call trace retrieval
+│   │   └── audit_service.py        # Sensitive PII redaction and audit logging
+│   └── integrations/
+│       └── ai_pipeline.py          # Member 2 AI orchestration adapter & fallback
 ├── tests/
-│   ├── __init__.py
-│   ├── conftest.py          # Pytest fixtures (async HTTP client)
-│   └── test_api.py          # Unit & integration test cases
-├── .env.example             # Template environment configuration
-├── .env                     # Local environment settings
-├── .gitignore               # Git ignore rules for Python / FastAPI
-├── requirements.txt         # Pinned production and test dependencies
-├── run.py                   # Server entrypoint launcher
-└── README.md                # Project documentation
+│   ├── conftest.py                 # Pytest async HTTP client fixtures
+│   ├── test_api.py                 # Base API & item tests
+│   ├── test_banking_auth.py        # Portal auth & banking flow tests
+│   └── test_vaani_backend.py       # Complete VaaniDesk test suite (20/20 passing)
+├── .env                            # Active environment configuration
+├── .env.example                    # Environment template
+├── requirements.txt                # Pinned production and test dependencies
+└── run.py                          # Server launcher
 ```
 
 ---
@@ -47,85 +62,60 @@ server/
 ## 🚀 Quick Start
 
 ### 1. Prerequisites
-- Python 3.10+ (detected Python 3.11)
-- Windows PowerShell / Command Prompt or Bash
+- Python 3.10+ (Python 3.12 recommended)
+- Virtual environment in `.venv/`
 
 ### 2. Activate Virtual Environment
-
-A dedicated virtual environment has already been created in `server/venv`.
-
-**On Windows (PowerShell):**
 ```powershell
-cd D:\Pramod\azentio\server
-.\venv\Scripts\Activate.ps1
+# Windows:
+.venv\Scripts\activate
+# Linux/macOS:
+source .venv/bin/activate
 ```
 
-*(If script execution is disabled in PowerShell, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first, or use `.\venv\Scripts\activate.bat` in CMD).*
-
-### 3. Install Dependencies (Already Pre-installed)
-
-If you modify or update dependencies in the future:
+### 3. Seed Repeatable Synthetic Banking Data
 ```powershell
-pip install -r requirements.txt
+python -m app.db.seed
 ```
+*Seeds customers (`C1023`, `C1024`, `C1099`), loan applications, active loans, EMI repayment schedules, accounts, and transactions into local SQLite database (`azentio_banking.db`). Safe to run repeatedly.*
 
 ### 4. Run the Development Server
-
-You can launch the server using either `run.py` or `uvicorn`:
-
-**Option A (Using run script):**
 ```powershell
 python run.py
-```
-
-**Option B (Using uvicorn directly):**
-```powershell
+# Or with uvicorn:
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Server will start at:
 - **Base URL:** [http://127.0.0.1:8000](http://127.0.0.1:8000)
+- **Canonical Health Probe:** [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
 - **Interactive Swagger Docs:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **ReDoc Documentation:** [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
-- **OpenAPI Schema:** [http://127.0.0.1:8000/api/v1/openapi.json](http://127.0.0.1:8000/api/v1/openapi.json)
+- **ReDoc:** [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
 ---
 
-## 📡 API Endpoints
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/` | Root greeting & links to documentation |
-| `GET` | `/api/v1/health` | Service health status check |
-| `GET` | `/api/v1/items/` | List items (supports `skip`, `limit`, `active_only`) |
-| `GET` | `/api/v1/items/{id}` | Get item details by ID |
-| `POST` | `/api/v1/items/` | Create a new item (with Pydantic validation) |
-| `PUT` | `/api/v1/items/{id}` | Update existing item |
-| `DELETE` | `/api/v1/items/{id}` | Delete item by ID |
-
----
-
-## 🧪 Running Tests
-
-Run the test suite with `pytest`:
+## 🧪 Running Automated Tests
 
 ```powershell
-cd D:\Pramod\azentio\server
-.\venv\Scripts\pytest -v
+pytest tests/ -v
 ```
+All 20 test cases cover:
+- Canonical `/health` probe
+- Session creation, lockout after 3 failed attempts, session termination
+- Customer verification via DOB
+- Mock LOS loan applications & document requirements
+- Mock LMS loan balance & repayment schedules
+- Mock CBS masked accounts & transactions
+- CSM ticket creation & atomic idempotency enforcement
+- AI conversation turns & state machine gating
+- Session escalation to human agents
+- Operations dashboard call history & audit traces
 
 ---
 
-## ⚙️ Configuration (`.env`)
+## 📚 Documentation Reference
 
-Configuration is managed via `pydantic-settings` in `app/core/config.py`:
-
-| Variable | Default | Description |
-| :--- | :--- | :--- |
-| `PROJECT_NAME` | `FastAPI Backend Server` | Name of the service |
-| `API_V1_STR` | `/api/v1` | URL prefix for version 1 API |
-| `DEBUG` | `true` | Enable hot-reloading & debug logs |
-| `HOST` | `127.0.0.1` | Host address |
-| `PORT` | `8000` | Port number |
-| `BACKEND_CORS_ORIGINS` | `["http://localhost:3000", ...]` | Allowed CORS origins (JSON array or comma-separated) |
-
+- **Complete API Reference (Markdown):** `docs/VAANIDESK_API_DOCUMENTATION.md`
+- **Complete API Reference (PDF):** `docs/VAANIDESK_API_DOCUMENTATION.pdf`
+- **Formal API Contract:** `docs/API_CONTRACT.md`
+- **Backend Architecture Audit:** `docs/BACKEND_AUDIT.md`
+- **Frontend Handoff Guide:** `docs/FRONTEND_API_HANDOFF.md`

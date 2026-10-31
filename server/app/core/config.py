@@ -24,8 +24,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
-    # Database: Exclusively PostgreSQL (Neon)
-    DATABASE_URL: str = ""
+    # Database: SQLite for local prototype, PostgreSQL (Neon) for cloud
+    DATABASE_URL: str = "sqlite+aiosqlite:///./azentio_banking.db"
 
     # Authentication & JWT
     SECRET_KEY: str = "azentio-banking-jwt-secret-key-change-in-production-2026"
@@ -51,9 +51,14 @@ class Settings(BaseSettings):
     @classmethod
     def assemble_db_url(cls, v: str) -> str:
         if not v or not v.strip():
-            return ""
+            return "sqlite+aiosqlite:///./azentio_banking.db"
 
         url = v.strip().strip('"').strip("'")
+        if url.startswith("sqlite:///") and not url.startswith("sqlite+aiosqlite:///"):
+            return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+        if url.startswith("sqlite+aiosqlite:///"):
+            return url
+
         # Convert standard Neon postgres URLs to asyncpg format
         if url.startswith("postgres://"):
             url = url.replace("postgres://", "postgresql+asyncpg://", 1)

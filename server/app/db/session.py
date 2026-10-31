@@ -18,25 +18,29 @@ def get_ssl_context() -> ssl.SSLContext:
 
 
 def get_engine() -> AsyncEngine:
-    """Lazily or dynamically get the PostgreSQL Neon engine."""
+    """Lazily or dynamically get the async engine (SQLite or PostgreSQL Neon)."""
     global _engine
     if _engine is None:
-        if not settings.DATABASE_URL:
-            raise RuntimeError(
-                "PostgreSQL Neon database not configured! Please provide DATABASE_URL in server/.env"
+        db_url = settings.DATABASE_URL or "sqlite+aiosqlite:///./azentio_banking.db"
+        if "sqlite" in db_url:
+            _engine = create_async_engine(
+                db_url,
+                echo=False,
+                connect_args={"check_same_thread": False},
             )
-        _engine = create_async_engine(
-            settings.DATABASE_URL,
-            echo=False,
-            connect_args={"ssl": get_ssl_context()},
-            pool_pre_ping=True,
-            pool_recycle=300,
-        )
+        else:
+            _engine = create_async_engine(
+                db_url,
+                echo=False,
+                connect_args={"ssl": get_ssl_context()},
+                pool_pre_ping=True,
+                pool_recycle=300,
+            )
     return _engine
 
 
 def get_session_maker() -> async_sessionmaker[AsyncSession]:
-    """Get the session maker bound to the PostgreSQL engine."""
+    """Get the session maker bound to the engine."""
     global _session_maker
     if _session_maker is None:
         engine = get_engine()
@@ -51,14 +55,7 @@ def get_session_maker() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI route dependency providing an active PostgreSQL session."""
-    if not settings.DATABASE_URL:
-        from fastapi import HTTPException, status
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="PostgreSQL Neon database not configured. Please set DATABASE_URL in server/.env",
-        )
-
+    """FastAPI route dependency providing an active database session."""
     session_maker = get_session_maker()
     async with session_maker() as session:
         try:
