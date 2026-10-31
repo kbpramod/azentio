@@ -10,7 +10,9 @@ NLU_MODE = os.getenv("NLU_MODE", "auto")
 LLM_MODEL = os.getenv("LLM_MODEL", "claude-opus-5-5")
 LLM_EFFORT = os.getenv("LLM_EFFORT", "low")
 
-# Empty = use the built-in mock bank; otherwise Member B's API base URL
+# Where banking data comes from: "mock" (built-in), "neon" (shared Postgres), or "http" (BANKING_API_URL)
+BANK_BACKEND = os.getenv("BANK_BACKEND", "mock")
+DATABASE_URL = os.getenv("DATABASE_URL", "")
 BANKING_API_URL = os.getenv("BANKING_API_URL", "").rstrip("/")
 
 STT_MODEL = os.getenv("STT_MODEL", "small")

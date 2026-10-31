@@ -100,6 +100,11 @@ class Orchestrator:
             s.audit("GUARD", {"ok": True})
 
         s.add_turn("agent", reply)
+        if hasattr(self.backend, "record_turn"):  # persist call history for the ops dashboard
+            try:
+                self.backend.record_turn(s, text, reply, [i.name.value for i in nlu.intents], stt_conf, latency)
+            except Exception as exc:
+                s.audit("ERROR", {"error": f"record_turn: {type(exc).__name__}"})
         return self._response(s, text, stt_conf, nlu.intents, reply, ctx.sources, ctx.new_tickets, latency)
 
     # ------------------------------------------------------------ core logic
@@ -136,7 +141,7 @@ class Orchestrator:
                 work.append(n)
         s.pending_intents = []
 
-        data_count = sum(1 for n in work if n in DATA_INTENTS)
+        data_count = sum(1 for n in set(names) if n in DATA_INTENTS)  # only what was asked this turn
         if data_count > 1 and not s.verified and s.state != State.LOCKED:
             ctx.say("I can help with both of those.")
 

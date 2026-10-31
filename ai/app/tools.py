@@ -65,7 +65,12 @@ class HttpBank:
 
 
 def make_backend():
-    return HttpBank(config.BANKING_API_URL) if config.BANKING_API_URL else MockBank()
+    if config.BANK_BACKEND == "neon":
+        from .neon_bank import NeonBank
+        return NeonBank()
+    if config.BANK_BACKEND == "http" and config.BANKING_API_URL:
+        return HttpBank(config.BANKING_API_URL)
+    return MockBank()
 
 
 class Tools:

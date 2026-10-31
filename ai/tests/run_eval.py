@@ -12,9 +12,16 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT.parent))
 
+import os  # noqa: E402
+
 from app.mock_bank import MockBank  # noqa: E402
 from app.orchestrator import Orchestrator  # noqa: E402
 from app.state import new_session  # noqa: E402
+
+
+def make_neon():
+    from app.neon_bank import NeonBank
+    return NeonBank()
 
 
 def check(resp, exp) -> list[str]:
@@ -52,8 +59,11 @@ def run(verbose=True):
     cases = json.loads((ROOT / "eval_cases.json").read_text(encoding="utf-8"))
     results = []
     for case in cases:
-        orch = Orchestrator(backend=MockBank())  # fresh data per case
+        # EVAL_BACKEND=neon runs against the shared database; default is a fresh in-memory mock per case
+        backend = make_neon() if os.getenv("EVAL_BACKEND") == "neon" else MockBank()
+        orch = Orchestrator(backend=backend)
         s = new_session()
+        s.id = "EVAL-" + s.id  # eval rows in the DB are easy to find and clean up
         orch.greet(s)
         case_fails, lat = [], []
         for n, turn in enumerate(case["turns"], 1):
